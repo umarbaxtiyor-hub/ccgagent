@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     bot_token: str
     anthropic_api_key: str
     anthropic_model: str = "claude-sonnet-5"
+    groq_api_key: str = ""
     database_url: str
     allowed_user_ids: str = ""
 

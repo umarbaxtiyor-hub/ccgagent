@@ -20,12 +20,15 @@ class PendingTransaction:
     counterparty: str
     occurred_on: str
     source: str
+    project_id: int | None = None
+    project_name: str | None = None
 
 
 @dataclass
 class PendingBankImport:
     user_db_id: int
     telegram_id: int
+    project_id: int | None = None
     rows: list[dict] = field(default_factory=list)
 
 

@@ -14,7 +14,11 @@ async def build_report(session: AsyncSession, start: date, end: date) -> BytesIO
     result = await session.execute(
         select(Transaction)
         .where(Transaction.occurred_on >= start, Transaction.occurred_on <= end)
-        .options(selectinload(Transaction.category), selectinload(Transaction.created_by))
+        .options(
+            selectinload(Transaction.category),
+            selectinload(Transaction.created_by),
+            selectinload(Transaction.project),
+        )
         .order_by(Transaction.occurred_on, Transaction.id)
     )
     transactions = result.scalars().all()
@@ -22,7 +26,7 @@ async def build_report(session: AsyncSession, start: date, end: date) -> BytesIO
     wb = Workbook()
     ws = wb.active
     ws.title = "Tranzaksiyalar"
-    headers = ["Sana", "Turi", "Kategoriya", "Summasi", "Tavsif", "Kontragent", "Kim kiritdi"]
+    headers = ["Sana", "Loyiha", "Turi", "Kategoriya", "Summasi", "Tavsif", "Kontragent", "Kim kiritdi"]
     ws.append(headers)
     for cell in ws[1]:
         cell.font = Font(bold=True)
@@ -39,6 +43,7 @@ async def build_report(session: AsyncSession, start: date, end: date) -> BytesIO
         ws.append(
             [
                 t.occurred_on.isoformat(),
+                t.project.name if t.project else "-",
                 type_label,
                 t.category.name if t.category else "",
                 amount,
@@ -49,23 +54,24 @@ async def build_report(session: AsyncSession, start: date, end: date) -> BytesIO
         )
 
     ws.append([])
-    ws.append(["", "", "Jami kirim", total_income])
-    ws.append(["", "", "Jami chiqim", total_expense])
-    ws.append(["", "", "Balans", total_income - total_expense])
+    ws.append(["", "", "", "Jami kirim", total_income])
+    ws.append(["", "", "", "Jami chiqim", total_expense])
+    ws.append(["", "", "", "Balans", total_income - total_expense])
 
     summary_ws = wb.create_sheet("Kategoriyalar bo'yicha")
-    summary_ws.append(["Turi", "Kategoriya", "Jami summa"])
+    summary_ws.append(["Loyiha", "Turi", "Kategoriya", "Jami summa"])
     for cell in summary_ws[1]:
         cell.font = Font(bold=True)
 
-    totals_by_category: dict[tuple[str, str], float] = {}
+    totals_by_category: dict[tuple[str, str, str], float] = {}
     for t in transactions:
         type_label = "Kirim" if t.type == TransactionType.income else "Chiqim"
-        key = (type_label, t.category.name if t.category else "Noma'lum")
+        project_name = t.project.name if t.project else "-"
+        key = (project_name, type_label, t.category.name if t.category else "Noma'lum")
         totals_by_category[key] = totals_by_category.get(key, 0.0) + float(t.amount)
 
-    for (type_label, category_name), total in sorted(totals_by_category.items()):
-        summary_ws.append([type_label, category_name, total])
+    for (project_name, type_label, category_name), total in sorted(totals_by_category.items()):
+        summary_ws.append([project_name, type_label, category_name, total])
 
     for sheet in (ws, summary_ws):
         for column_cells in sheet.columns:

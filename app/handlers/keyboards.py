@@ -1,6 +1,7 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.handlers.pending_store import PendingTransaction
+from app.models import Project
 
 
 def confirm_keyboard(pending_id: str) -> InlineKeyboardMarkup:
@@ -40,6 +41,16 @@ def bank_import_keyboard(pending_id: str) -> InlineKeyboardMarkup:
     )
 
 
+def project_list_keyboard(projects: list[Project]) -> InlineKeyboardMarkup:
+    rows = []
+    for i in range(0, len(projects), 2):
+        chunk = projects[i : i + 2]
+        rows.append(
+            [InlineKeyboardButton(text=p.name, callback_data=f"proj_select:{p.id}") for p in chunk]
+        )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def report_period_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -56,6 +67,7 @@ def format_pending(p: PendingTransaction) -> str:
     type_label = "Kirim" if p.type == "income" else "Chiqim"
     lines = [
         f"<b>{type_label}</b>: {p.amount:,.0f} so'm".replace(",", " "),
+        f"Loyiha: {p.project_name or '-'}",
         f"Kategoriya: {p.category}",
         f"Sana: {p.occurred_on}",
         f"Tavsif: {p.description or '-'}",

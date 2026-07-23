@@ -5,6 +5,7 @@ from aiogram.types import Message
 
 from app.access import AllowedUser
 from app.db import async_session
+from app.handlers.common import require_project
 from app.handlers.keyboards import confirm_keyboard, format_pending
 from app.handlers.pending_store import PendingTransaction, add_pending_tx
 from app.models import TransactionSource, TransactionType
@@ -24,6 +25,8 @@ async def handle_receipt_photo(message: Message) -> None:
             full_name=message.from_user.full_name,
             username=message.from_user.username or "",
         )
+        if not await require_project(session, message, user):
+            return
         expense_cats = await category_names(session, TransactionType.expense)
         income_cats = await category_names(session, TransactionType.income)
 
@@ -59,6 +62,8 @@ async def handle_receipt_photo(message: Message) -> None:
         counterparty=parsed.get("counterparty", ""),
         occurred_on=parsed["occurred_on"],
         source=TransactionSource.receipt_photo.value,
+        project_id=user.current_project_id,
+        project_name=user.current_project.name if user.current_project else None,
     )
     pending_id = add_pending_tx(pending)
     await status_msg.edit_text(format_pending(pending), reply_markup=confirm_keyboard(pending_id))

@@ -3,6 +3,7 @@ from aiogram.types import CallbackQuery, Message
 
 from app.access import AllowedUser
 from app.db import async_session
+from app.handlers.common import require_project
 from app.handlers.keyboards import bank_import_keyboard
 from app.handlers.pending_store import (
     PendingBankImport,
@@ -34,6 +35,8 @@ async def handle_bank_statement(message: Message) -> None:
             full_name=message.from_user.full_name,
             username=message.from_user.username or "",
         )
+        if not await require_project(session, message, user):
+            return
         expense_cats = await category_names(session, TransactionType.expense)
         income_cats = await category_names(session, TransactionType.income)
 
@@ -91,7 +94,12 @@ async def handle_bank_statement(message: Message) -> None:
             }
         )
 
-    pending = PendingBankImport(user_db_id=user.id, telegram_id=message.from_user.id, rows=enriched_rows)
+    pending = PendingBankImport(
+        user_db_id=user.id,
+        telegram_id=message.from_user.id,
+        project_id=user.current_project_id,
+        rows=enriched_rows,
+    )
     pending_id = add_pending_bank(pending)
 
     summary = (
@@ -127,6 +135,7 @@ async def confirm_bank_import(callback: CallbackQuery) -> None:
                     occurred_on=date_cls.fromisoformat(row["occurred_on"]),
                     category_id=category.id,
                     created_by_id=pending.user_db_id,
+                    project_id=pending.project_id,
                 )
             )
         await session.commit()

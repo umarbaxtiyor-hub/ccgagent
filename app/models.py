@@ -18,6 +18,18 @@ class TransactionSource(str, enum.Enum):
     manual_text = "manual_text"
     receipt_photo = "receipt_photo"
     bank_statement = "bank_statement"
+    voice_message = "voice_message"
+
+
+class Project(Base):
+    __tablename__ = "projects"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    users: Mapped[list["User"]] = relationship(back_populates="current_project")
+    transactions: Mapped[list["Transaction"]] = relationship(back_populates="project")
 
 
 class User(Base):
@@ -28,6 +40,9 @@ class User(Base):
     full_name: Mapped[str] = mapped_column(String(255), default="")
     username: Mapped[str] = mapped_column(String(255), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    current_project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), nullable=True)
+    current_project: Mapped["Project | None"] = relationship(back_populates="users")
 
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="created_by")
 
@@ -59,3 +74,6 @@ class Transaction(Base):
 
     created_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     created_by: Mapped["User"] = relationship(back_populates="transactions")
+
+    project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), nullable=True)
+    project: Mapped["Project | None"] = relationship(back_populates="transactions")

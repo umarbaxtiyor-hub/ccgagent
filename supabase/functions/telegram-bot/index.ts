@@ -696,6 +696,26 @@ async function handleUpdate(config: BotConfig, update: any) {
 }
 
 Deno.serve(async (req: Request) => {
+  const url = new URL(req.url);
+  if (url.searchParams.get("debug") === "1") {
+    try {
+      const config = await loadConfig();
+      const result = await sendMessage(
+        config.bot_token,
+        667445762,
+        "Debug: edge function ichidan to'g'ridan-to'g'ri.",
+      );
+      return new Response(JSON.stringify(result), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    } catch (e) {
+      // deno-lint-ignore no-explicit-any
+      const err = e as any;
+      return new Response("EXCEPTION: " + String(err?.stack || err), { status: 200 });
+    }
+  }
+
   try {
     const config = await loadConfig();
 

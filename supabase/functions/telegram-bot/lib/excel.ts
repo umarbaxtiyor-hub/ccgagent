@@ -134,6 +134,7 @@ export function parseBankStatement(bytes: Uint8Array, filename: string): BankSta
 }
 
 interface CategoryTotal {
+  projectName: string;
   typeLabel: string;
   category: string;
   total: number;
@@ -143,7 +144,7 @@ export function buildReportWorkbook(rows: ReportRow[]): Uint8Array {
   const wb = XLSX.utils.book_new();
 
   const sheetData: (string | number)[][] = [
-    ["Sana", "Turi", "Kategoriya", "Summasi", "Tavsif", "Kontragent", "Kim kiritdi"],
+    ["Sana", "Loyiha", "Turi", "Kategoriya", "Summasi", "Tavsif", "Kontragent", "Kim kiritdi"],
   ];
   let totalIncome = 0;
   let totalExpense = 0;
@@ -151,6 +152,7 @@ export function buildReportWorkbook(rows: ReportRow[]): Uint8Array {
 
   for (const r of rows) {
     const typeLabel = r.type === "income" ? "Kirim" : "Chiqim";
+    const projectName = r.project_name ?? "-";
     if (r.type === "income") {
       totalIncome += r.amount;
     } else {
@@ -158,6 +160,7 @@ export function buildReportWorkbook(rows: ReportRow[]): Uint8Array {
     }
     sheetData.push([
       r.occurred_on,
+      projectName,
       typeLabel,
       r.category,
       r.amount,
@@ -166,29 +169,29 @@ export function buildReportWorkbook(rows: ReportRow[]): Uint8Array {
       r.full_name,
     ]);
 
-    const key = typeLabel + "::" + r.category;
+    const key = projectName + "::" + typeLabel + "::" + r.category;
     const existing = totalsByCategory.get(key);
     if (existing) {
       existing.total += r.amount;
     } else {
-      totalsByCategory.set(key, { typeLabel, category: r.category, total: r.amount });
+      totalsByCategory.set(key, { projectName, typeLabel, category: r.category, total: r.amount });
     }
   }
 
   sheetData.push([]);
-  sheetData.push(["", "", "Jami kirim", totalIncome]);
-  sheetData.push(["", "", "Jami chiqim", totalExpense]);
-  sheetData.push(["", "", "Balans", totalIncome - totalExpense]);
+  sheetData.push(["", "", "", "Jami kirim", totalIncome]);
+  sheetData.push(["", "", "", "Jami chiqim", totalExpense]);
+  sheetData.push(["", "", "", "Balans", totalIncome - totalExpense]);
 
   const ws = XLSX.utils.aoa_to_sheet(sheetData);
   XLSX.utils.book_append_sheet(wb, ws, "Tranzaksiyalar");
 
-  const summaryData: (string | number)[][] = [["Turi", "Kategoriya", "Jami summa"]];
+  const summaryData: (string | number)[][] = [["Loyiha", "Turi", "Kategoriya", "Jami summa"]];
   const sortedEntries = [...totalsByCategory.values()].sort((a, b) =>
-    (a.typeLabel + a.category).localeCompare(b.typeLabel + b.category)
+    (a.projectName + a.typeLabel + a.category).localeCompare(b.projectName + b.typeLabel + b.category)
   );
   for (const entry of sortedEntries) {
-    summaryData.push([entry.typeLabel, entry.category, entry.total]);
+    summaryData.push([entry.projectName, entry.typeLabel, entry.category, entry.total]);
   }
   const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
   XLSX.utils.book_append_sheet(wb, summaryWs, "Kategoriyalar bo'yicha");

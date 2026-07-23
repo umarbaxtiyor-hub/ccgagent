@@ -1,4 +1,4 @@
-import type { PendingTransaction } from "./db.ts";
+import type { PendingTransaction, Project } from "./db.ts";
 
 export function confirmKeyboard(pendingId: string) {
   return {
@@ -38,6 +38,15 @@ export function bankImportKeyboard(pendingId: string) {
   };
 }
 
+export function projectListKeyboard(projects: Project[]) {
+  const rows = [];
+  for (let i = 0; i < projects.length; i += 2) {
+    const chunk = projects.slice(i, i + 2);
+    rows.push(chunk.map((p) => ({ text: p.name, callback_data: `proj_select:${p.id}` })));
+  }
+  return { inline_keyboard: rows };
+}
+
 export function reportPeriodKeyboard() {
   return {
     inline_keyboard: [
@@ -51,11 +60,12 @@ export function reportPeriodKeyboard() {
 }
 
 export function formatPending(p: Pick<PendingTransaction,
-  "type" | "amount" | "category" | "occurred_on" | "description" | "counterparty">): string {
+  "type" | "amount" | "category" | "occurred_on" | "description" | "counterparty" | "project_name">): string {
   const typeLabel = p.type === "income" ? "Kirim" : "Chiqim";
   const amountText = Math.round(p.amount).toLocaleString("uz-UZ").replace(/,/g, " ");
   const lines = [
     `<b>${typeLabel}</b>: ${amountText} so'm`,
+    `Loyiha: ${p.project_name ?? "-"}`,
     `Kategoriya: ${p.category}`,
     `Sana: ${p.occurred_on}`,
     `Tavsif: ${p.description || "-"}`,

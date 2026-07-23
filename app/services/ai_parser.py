@@ -68,6 +68,10 @@ async def parse_expense_text(
         f"Bugungi sana: {today.isoformat()}\n"
         f"Chiqim kategoriyalari: {', '.join(expense_categories)}\n"
         f"Kirim kategoriyalari: {', '.join(income_categories)}\n\n"
+        "Eslatma: ba'zida summa to'g'ridan-to'g'ri aytilmaydi, balki miqdor va birlik narxi alohida "
+        "ko'rsatiladi (masalan \"10 litrdan 80 mingdan\" yoki \"5 qop 60 ming dan\") - bunday holatda "
+        "ularni ko'paytirib umumiy summani hisobla (10 x 80000 = 800000). Faqat summani ikkala tomon "
+        "ham noaniq bo'lganda 'low' confidence qo'y.\n\n"
         f"Quyidagi xabarni tahlil qil va record_transaction tool orqali natijani qaytar:\n"
         f'"{text}"'
     )

@@ -38,22 +38,57 @@ export function isAllowedUser(config: BotConfig, telegramId: number): boolean {
   return ids.includes(String(telegramId));
 }
 
+export interface UserRecord {
+  id: number;
+  current_project_id: number | null;
+  current_project_name: string | null;
+}
+
 export async function getOrCreateUser(
   telegramId: number,
   fullName: string,
   username: string,
-): Promise<number> {
+): Promise<UserRecord> {
   const sql = getSql();
-  const existing = await sql<{ id: number }[]>`
-    select id from users where telegram_id = ${telegramId}
+  const existing = await sql<UserRecord[]>`
+    select u.id, u.current_project_id,
+           p.name as current_project_name
+    from users u
+    left join projects p on p.id = u.current_project_id
+    where u.telegram_id = ${telegramId}
   `;
-  if (existing.length) return existing[0].id;
+  if (existing.length) return existing[0];
   const inserted = await sql<{ id: number }[]>`
     insert into users (telegram_id, full_name, username)
     values (${telegramId}, ${fullName}, ${username})
     returning id
   `;
-  return inserted[0].id;
+  return { id: inserted[0].id, current_project_id: null, current_project_name: null };
+}
+
+export interface Project {
+  id: number;
+  name: string;
+}
+
+export async function listProjects(): Promise<Project[]> {
+  const sql = getSql();
+  return await sql<Project[]>`select id, name from projects order by name`;
+}
+
+export async function createProject(name: string): Promise<Project> {
+  const sql = getSql();
+  const existing = await sql<Project[]>`select id, name from projects where name = ${name}`;
+  if (existing.length) return existing[0];
+  const [row] = await sql<Project[]>`
+    insert into projects (name) values (${name}) returning id, name
+  `;
+  return row;
+}
+
+export async function setUserCurrentProject(userDbId: number, projectId: number): Promise<void> {
+  const sql = getSql();
+  await sql`update users set current_project_id = ${projectId} where id = ${userDbId}`;
 }
 
 export async function categoryNames(type: "income" | "expense"): Promise<string[]> {
@@ -91,6 +126,8 @@ export interface PendingTransaction {
   counterparty: string;
   occurred_on: string;
   source: "manual_text" | "receipt_photo" | "bank_statement";
+  project_id: number | null;
+  project_name: string | null;
 }
 
 export async function addPendingTx(
@@ -99,10 +136,12 @@ export async function addPendingTx(
   const sql = getSql();
   const [row] = await sql<{ id: string }[]>`
     insert into pending_transactions
-      (telegram_id, user_db_id, type, amount, category, description, counterparty, occurred_on, source)
+      (telegram_id, user_db_id, type, amount, category, description, counterparty, occurred_on,
+       source, project_id, project_name)
     values
       (${data.telegram_id}, ${data.user_db_id}, ${data.type}, ${data.amount}, ${data.category},
-       ${data.description}, ${data.counterparty}, ${data.occurred_on}, ${data.source})
+       ${data.description}, ${data.counterparty}, ${data.occurred_on}, ${data.source},
+       ${data.project_id}, ${data.project_name})
     returning id
   `;
   return row.id;
@@ -112,7 +151,8 @@ export async function getPendingTx(id: string): Promise<PendingTransaction | nul
   const sql = getSql();
   const rows = await sql<PendingTransaction[]>`
     select id, telegram_id, user_db_id, type, amount::float8 as amount, category,
-           description, counterparty, occurred_on::text as occurred_on, source
+           description, counterparty, occurred_on::text as occurred_on, source,
+           project_id, project_name
     from pending_transactions where id = ${id}
   `;
   return rows[0] ?? null;
@@ -129,7 +169,8 @@ export async function popPendingTx(id: string): Promise<PendingTransaction | nul
     delete from pending_transactions
     where id = ${id}
     returning id, telegram_id, user_db_id, type, amount::float8 as amount, category,
-              description, counterparty, occurred_on::text as occurred_on, source
+              description, counterparty, occurred_on::text as occurred_on, source,
+              project_id, project_name
   `;
   return rows[0] ?? null;
 }
@@ -145,12 +186,13 @@ export interface PendingBankRow {
 export async function addPendingBankImport(
   telegramId: number,
   userDbId: number,
+  projectId: number | null,
   rows: PendingBankRow[],
 ): Promise<string> {
   const sql = getSql();
   const [row] = await sql<{ id: string }[]>`
-    insert into pending_bank_imports (telegram_id, user_db_id, rows)
-    values (${telegramId}, ${userDbId}, ${sql.json(rows)})
+    insert into pending_bank_imports (telegram_id, user_db_id, project_id, rows)
+    values (${telegramId}, ${userDbId}, ${projectId}, ${sql.json(rows)})
     returning id
   `;
   return row.id;
@@ -158,11 +200,11 @@ export async function addPendingBankImport(
 
 export async function popPendingBankImport(
   id: string,
-): Promise<{ user_db_id: number; rows: PendingBankRow[] } | null> {
+): Promise<{ user_db_id: number; project_id: number | null; rows: PendingBankRow[] } | null> {
   const sql = getSql();
-  const rows = await sql<{ user_db_id: number; rows: PendingBankRow[] }[]>`
+  const rows = await sql<{ user_db_id: number; project_id: number | null; rows: PendingBankRow[] }[]>`
     delete from pending_bank_imports where id = ${id}
-    returning user_db_id, rows
+    returning user_db_id, project_id, rows
   `;
   return rows[0] ?? null;
 }
@@ -176,14 +218,16 @@ export async function insertTransaction(params: {
   occurred_on: string;
   category_id: number;
   created_by_id: number;
+  project_id: number | null;
 }): Promise<void> {
   const sql = getSql();
   await sql`
     insert into transactions
-      (type, source, amount, description, counterparty, occurred_on, category_id, created_by_id)
+      (type, source, amount, description, counterparty, occurred_on, category_id, created_by_id, project_id)
     values
       (${params.type}, ${params.source}, ${params.amount}, ${params.description},
-       ${params.counterparty}, ${params.occurred_on}, ${params.category_id}, ${params.created_by_id})
+       ${params.counterparty}, ${params.occurred_on}, ${params.category_id}, ${params.created_by_id},
+       ${params.project_id})
   `;
 }
 
@@ -195,6 +239,7 @@ export interface ReportRow {
   description: string;
   counterparty: string;
   full_name: string;
+  project_name: string | null;
 }
 
 export async function fetchReportRows(start: string, end: string): Promise<ReportRow[]> {
@@ -207,10 +252,12 @@ export async function fetchReportRows(start: string, end: string): Promise<Repor
       t.amount::float8 as amount,
       t.description,
       t.counterparty,
-      u.full_name
+      u.full_name,
+      p.name as project_name
     from transactions t
     join categories c on c.id = t.category_id
     join users u on u.id = t.created_by_id
+    left join projects p on p.id = t.project_id
     where t.occurred_on >= ${start} and t.occurred_on <= ${end}
     order by t.occurred_on, t.id
   `;

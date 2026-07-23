@@ -2,17 +2,21 @@ import {
   addPendingBankImport,
   addPendingTx,
   categoryNames,
+  createProject,
   fetchReportRows,
   getOrCreateCategory,
   getOrCreateUser,
   getPendingTx,
   insertTransaction,
   isAllowedUser,
+  listProjects,
   loadConfig,
   popPendingBankImport,
   popPendingTx,
   setPendingTxCategory,
+  setUserCurrentProject,
   type BotConfig,
+  type UserRecord,
 } from "./lib/db.ts";
 import {
   answerCallbackQuery,
@@ -30,6 +34,7 @@ import {
   categoryChoiceKeyboard,
   confirmKeyboard,
   formatPending,
+  projectListKeyboard,
   reportPeriodKeyboard,
 } from "./lib/keyboards.ts";
 
@@ -41,8 +46,31 @@ const WELCOME_TEXT =
   "- Chek yoki kvitansiya rasmini yuboring - undan ma'lumotni o'zim o'qib olaman.\n" +
   "- Bank ko'chirmasi faylini (.xlsx yoki .csv) yuboring - barcha tranzaksiyalarni avtomatik " +
   "kategoriyalarga bo'lib qo'shaman.\n" +
+  "- /loyiha - qaysi loyiha (obyekt) uchun yozayotganingizni tanlash yoki almashtirish.\n" +
+  "- /loyiha_yarat <nomi> - yangi loyiha qo'shish.\n" +
   "- /report - kunlik/haftalik/oylik hisobotni Excel faylda olish.\n\n" +
   "Har bir yozuvni saqlashdan oldin tasdiqlashingizni so'rayman.";
+
+async function requireProject(config: BotConfig, chatId: number, user: UserRecord): Promise<boolean> {
+  if (user.current_project_id) return true;
+  const projects = await listProjects();
+  if (projects.length === 0) {
+    await sendMessage(
+      config.bot_token,
+      chatId,
+      "Hali birorta loyiha (obyekt) qo'shilmagan. Iltimos, admin /loyiha_yarat <nomi> buyrug'i " +
+        "bilan birinchi loyihani qo'shsin.",
+    );
+    return false;
+  }
+  await sendMessage(
+    config.bot_token,
+    chatId,
+    "Avval qaysi loyiha (obyekt) uchun ishlayotganingizni tanlang:",
+    projectListKeyboard(projects),
+  );
+  return false;
+}
 
 function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
@@ -75,11 +103,13 @@ const PERIOD_LABELS: Record<string, string> = {
 async function handleTextEntry(config: BotConfig, message: any) {
   const chatId = message.chat.id;
   const telegramId = message.from.id;
-  const userDbId = await getOrCreateUser(
+  const user = await getOrCreateUser(
     telegramId,
     [message.from.first_name, message.from.last_name].filter(Boolean).join(" "),
     message.from.username ?? "",
   );
+  if (!(await requireProject(config, chatId, user))) return;
+  const userDbId = user.id;
 
   const [expenseCats, incomeCats] = await Promise.all([
     categoryNames("expense"),
@@ -126,20 +156,33 @@ async function handleTextEntry(config: BotConfig, message: any) {
     counterparty: parsed.counterparty ?? "",
     occurred_on: parsed.occurred_on,
     source: "manual_text",
+    project_id: user.current_project_id,
+    project_name: user.current_project_name,
   });
 
-  await sendMessage(config.bot_token, chatId, formatPending({ ...parsed, counterparty: parsed.counterparty ?? "" }), confirmKeyboard(pendingId));
+  await sendMessage(
+    config.bot_token,
+    chatId,
+    formatPending({
+      ...parsed,
+      counterparty: parsed.counterparty ?? "",
+      project_name: user.current_project_name,
+    }),
+    confirmKeyboard(pendingId),
+  );
 }
 
 // deno-lint-ignore no-explicit-any
 async function handlePhoto(config: BotConfig, message: any) {
   const chatId = message.chat.id;
   const telegramId = message.from.id;
-  const userDbId = await getOrCreateUser(
+  const user = await getOrCreateUser(
     telegramId,
     [message.from.first_name, message.from.last_name].filter(Boolean).join(" "),
     message.from.username ?? "",
   );
+  if (!(await requireProject(config, chatId, user))) return;
+  const userDbId = user.id;
 
   const [expenseCats, incomeCats] = await Promise.all([
     categoryNames("expense"),
@@ -196,13 +239,19 @@ async function handlePhoto(config: BotConfig, message: any) {
     counterparty: parsed.counterparty ?? "",
     occurred_on: parsed.occurred_on,
     source: "receipt_photo",
+    project_id: user.current_project_id,
+    project_name: user.current_project_name,
   });
 
   await editMessageText(
     config.bot_token,
     chatId,
     statusMessageId,
-    formatPending({ ...parsed, counterparty: parsed.counterparty ?? "" }),
+    formatPending({
+      ...parsed,
+      counterparty: parsed.counterparty ?? "",
+      project_name: user.current_project_name,
+    }),
     confirmKeyboard(pendingId),
   );
 }
@@ -222,11 +271,13 @@ async function handleDocument(config: BotConfig, message: any) {
     return;
   }
 
-  const userDbId = await getOrCreateUser(
+  const user = await getOrCreateUser(
     telegramId,
     [message.from.first_name, message.from.last_name].filter(Boolean).join(" "),
     message.from.username ?? "",
   );
+  if (!(await requireProject(config, chatId, user))) return;
+  const userDbId = user.id;
   const [expenseCats, incomeCats] = await Promise.all([
     categoryNames("expense"),
     categoryNames("income"),
@@ -302,7 +353,7 @@ async function handleDocument(config: BotConfig, message: any) {
     };
   });
 
-  const pendingId = await addPendingBankImport(telegramId, userDbId, enrichedRows);
+  const pendingId = await addPendingBankImport(telegramId, userDbId, user.current_project_id, enrichedRows);
 
   const fmt = (n: number) => Math.round(n).toLocaleString("uz-UZ").replace(/,/g, " ");
   const summary =
@@ -350,6 +401,7 @@ async function handleCallbackQuery(config: BotConfig, cq: any) {
       occurred_on: pending.occurred_on,
       category_id: categoryId,
       created_by_id: pending.user_db_id,
+      project_id: pending.project_id,
     });
     await editMessageText(
       config.bot_token,
@@ -430,6 +482,7 @@ async function handleCallbackQuery(config: BotConfig, cq: any) {
         occurred_on: row.occurred_on,
         category_id: categoryId,
         created_by_id: pending.user_db_id,
+        project_id: pending.project_id,
       });
     }
     await editMessageText(config.bot_token, chatId, messageId, `✅ ${pending.rows.length} ta tranzaksiya saqlandi.`);
@@ -449,6 +502,26 @@ async function handleCallbackQuery(config: BotConfig, cq: any) {
     const period = data.split(":")[1];
     await handleReportCallback(config, chatId, period);
     await answerCallbackQuery(config.bot_token, cq.id);
+    return;
+  }
+
+  if (data.startsWith("proj_select:")) {
+    const projectId = parseInt(data.split(":")[1], 10);
+    const user = await getOrCreateUser(
+      cq.from.id,
+      [cq.from.first_name, cq.from.last_name].filter(Boolean).join(" "),
+      cq.from.username ?? "",
+    );
+    await setUserCurrentProject(user.id, projectId);
+    const projects = await listProjects();
+    const project = projects.find((p) => p.id === projectId);
+    await editMessageText(
+      config.bot_token,
+      chatId,
+      messageId,
+      `✅ Joriy loyiha: <b>${project?.name ?? projectId}</b>. Endi shu loyiha uchun yozishingiz mumkin.`,
+    );
+    await answerCallbackQuery(config.bot_token, cq.id, "Tanlandi");
     return;
   }
 }
@@ -490,6 +563,41 @@ async function handleUpdate(config: BotConfig, update: any) {
 
   if (text === "/report") {
     await sendMessage(config.bot_token, chatId, "Qaysi davr uchun hisobot kerak?", reportPeriodKeyboard());
+    return;
+  }
+
+  if (text === "/loyiha") {
+    const projects = await listProjects();
+    if (projects.length === 0) {
+      await sendMessage(
+        config.bot_token,
+        chatId,
+        "Hali birorta loyiha qo'shilmagan. /loyiha_yarat <nomi> buyrug'i bilan qo'shing.",
+      );
+      return;
+    }
+    await sendMessage(config.bot_token, chatId, "Loyihani tanlang:", projectListKeyboard(projects));
+    return;
+  }
+
+  if (text?.startsWith("/loyiha_yarat")) {
+    const name = text.replace("/loyiha_yarat", "").trim();
+    if (!name) {
+      await sendMessage(config.bot_token, chatId, "Iltimos, loyiha nomini ham yozing: /loyiha_yarat Obyekt-2");
+      return;
+    }
+    const project = await createProject(name);
+    const user = await getOrCreateUser(
+      telegramId,
+      [message.from.first_name, message.from.last_name].filter(Boolean).join(" "),
+      message.from.username ?? "",
+    );
+    await setUserCurrentProject(user.id, project.id);
+    await sendMessage(
+      config.bot_token,
+      chatId,
+      `✅ "${project.name}" loyihasi qo'shildi va joriy loyiha sifatida tanlandi.`,
+    );
     return;
   }
 

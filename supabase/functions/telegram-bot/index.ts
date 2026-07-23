@@ -619,8 +619,12 @@ async function handleUpdate(config: BotConfig, update: any) {
   }
 
   const text: string | undefined = message.text;
+  // Telegram clients sometimes send commands as "/start@BotUsername" (e.g. in
+  // groups, or via the suggestion menu) - strip that suffix before matching.
+  const firstToken = text?.split(/\s/)[0];
+  const cmd = firstToken?.split("@")[0];
 
-  if (text === "/start" || text === "/help") {
+  if (cmd === "/start" || cmd === "/help") {
     await getOrCreateUser(
       telegramId,
       [message.from.first_name, message.from.last_name].filter(Boolean).join(" "),
@@ -630,12 +634,12 @@ async function handleUpdate(config: BotConfig, update: any) {
     return;
   }
 
-  if (text === "/report") {
+  if (cmd === "/report") {
     await sendMessage(config.bot_token, chatId, "Qaysi davr uchun hisobot kerak?", reportPeriodKeyboard());
     return;
   }
 
-  if (text === "/loyiha") {
+  if (cmd === "/loyiha") {
     const projects = await listProjects();
     if (projects.length === 0) {
       await sendMessage(
@@ -649,8 +653,8 @@ async function handleUpdate(config: BotConfig, update: any) {
     return;
   }
 
-  if (text?.startsWith("/loyiha_yarat")) {
-    const name = text.replace("/loyiha_yarat", "").trim();
+  if (cmd === "/loyiha_yarat") {
+    const name = text!.slice(firstToken!.length).trim();
     if (!name) {
       await sendMessage(config.bot_token, chatId, "Iltimos, loyiha nomini ham yozing: /loyiha_yarat Obyekt-2");
       return;

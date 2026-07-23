@@ -45,6 +45,30 @@ Telegram bot orqali kunlik xarajatlar va bank hisobidan o'tadigan pullarni
 Bot birinchi ishga tushganda kerakli jadvallarni va standart kategoriyalarni
 (`app/services/categories.py`) o'zi yaratadi.
 
+## Railway'ga joylash
+
+1. [railway.app](https://railway.app) da yangi loyiha yarating va shu GitHub
+   repo (`claude/ai-agent-telegram-expenses-dcaqit` branch yoki uni `main`ga
+   birlashtirgandan keyin) bilan bog'lang. Railway `Dockerfile`ni avtomatik
+   aniqlab, konteynerni quradi.
+2. Loyihaga **Postgres** pluginini qo'shing (New → Database → PostgreSQL).
+   Railway avtomatik `DATABASE_URL` o'zgaruvchisini yaratadi (`postgres://`
+   ko'rinishida) — kod uni o'zi `postgresql+asyncpg://` ga o'giradi, qo'lda
+   o'zgartirish shart emas.
+3. Bot xizmatining "Variables" bo'limida qo'shing:
+   - `BOT_TOKEN`
+   - `ANTHROPIC_API_KEY`
+   - `ANTHROPIC_MODEL` (ixtiyoriy, standart: `claude-sonnet-5`)
+   - `ALLOWED_USER_IDS`
+   - `DATABASE_URL` — Postgres plugin bergan qiymatga referens qiling
+     (Railway'da `${{Postgres.DATABASE_URL}}` kabi reference variable
+     ishlatish mumkin)
+4. Bot uzluksiz ishlaydigan background process (long polling), tashqi HTTP
+   portini talab qilmaydi — Railway'da xizmat turini "Worker" qilib
+   qo'yishingiz mumkin (health-check/portni o'chirib qo'ying, aks holda
+   Railway HTTP javob kutib xizmatni "unhealthy" deb belgilashi mumkin).
+5. Deploy tugagach, botni Telegram'da `/start` bilan sinab ko'ring.
+
 ## Loyiha tuzilishi
 
 ```

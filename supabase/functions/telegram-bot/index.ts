@@ -28,6 +28,7 @@ import {
   sendMessage,
 } from "./lib/telegram.ts";
 import { categorizeBankRows, parseExpenseText, parseReceiptImage } from "./lib/ai.ts";
+import { transcribeVoice } from "./lib/stt.ts";
 import { BankImportError, buildReportWorkbook, parseBankStatement } from "./lib/excel.ts";
 import {
   bankImportKeyboard,
@@ -44,6 +45,7 @@ const WELCOME_TEXT =
   "- Erkin matn yozing (masalan: \"Sement uchun 500000 so'm to'ladim\") - men summani, " +
   "kategoriyani va turini o'zim aniqlayman.\n" +
   "- Chek yoki kvitansiya rasmini yuboring - undan ma'lumotni o'zim o'qib olaman.\n" +
+  "- Ovozli xabar yuboring - men uni matnga o'girib, xuddi yozma xabar kabi tahlil qilaman.\n" +
   "- Bank ko'chirmasi faylini (.xlsx yoki .csv) yuboring - barcha tranzaksiyalarni avtomatik " +
   "kategoriyalarga bo'lib qo'shaman.\n" +
   "- /loyiha - qaysi loyiha (obyekt) uchun yozayotganingizni tanlash yoki almashtirish.\n" +
@@ -99,18 +101,17 @@ const PERIOD_LABELS: Record<string, string> = {
   month: "Shu oylik",
 };
 
-// deno-lint-ignore no-explicit-any
-async function handleTextEntry(config: BotConfig, message: any) {
-  const chatId = message.chat.id;
-  const telegramId = message.from.id;
-  const user = await getOrCreateUser(
-    telegramId,
-    [message.from.first_name, message.from.last_name].filter(Boolean).join(" "),
-    message.from.username ?? "",
-  );
-  if (!(await requireProject(config, chatId, user))) return;
-  const userDbId = user.id;
+type QueueResult =
+  | { ok: true; pendingId: string; text: string }
+  | { ok: false; text: string };
 
+async function queueTextTransaction(
+  config: BotConfig,
+  telegramId: number,
+  user: UserRecord,
+  text: string,
+  source: "manual_text" | "voice_message",
+): Promise<QueueResult> {
   const [expenseCats, incomeCats] = await Promise.all([
     categoryNames("expense"),
     categoryNames("income"),
@@ -121,54 +122,122 @@ async function handleTextEntry(config: BotConfig, message: any) {
     parsed = await parseExpenseText(
       config.anthropic_api_key,
       config.anthropic_model,
-      message.text,
+      text,
       expenseCats,
       incomeCats,
       todayStr(),
     );
   } catch (e) {
     console.error("parseExpenseText failed", e);
-    await sendMessage(
-      config.bot_token,
-      chatId,
-      "Kechirasiz, xabaringizni tahlil qila olmadim. Iltimos, summani va nima uchunligini aniqroq yozing.",
-    );
-    return;
+    return {
+      ok: false,
+      text: "Kechirasiz, xabaringizni tahlil qila olmadim. Iltimos, summani va nima uchunligini aniqroq yozing.",
+    };
   }
 
   if (parsed.confidence === "low") {
-    await sendMessage(
-      config.bot_token,
-      chatId,
-      "Xabaringizdan summa yoki tafsilotlarni aniq ajrata olmadim. Iltimos, masalan shu ko'rinishda " +
+    return {
+      ok: false,
+      text:
+        "Xabaringizdan summa yoki tafsilotlarni aniq ajrata olmadim. Iltimos, masalan shu ko'rinishda " +
         "qayta yozing: \"Sement uchun 500000 so'm to'ladim\".",
-    );
-    return;
+    };
   }
 
   const pendingId = await addPendingTx({
     telegram_id: telegramId,
-    user_db_id: userDbId,
+    user_db_id: user.id,
     type: parsed.type,
     amount: parsed.amount,
     category: parsed.category,
     description: parsed.description ?? "",
     counterparty: parsed.counterparty ?? "",
     occurred_on: parsed.occurred_on,
-    source: "manual_text",
+    source,
     project_id: user.current_project_id,
     project_name: user.current_project_name,
   });
 
-  await sendMessage(
+  const formatted = formatPending({
+    ...parsed,
+    counterparty: parsed.counterparty ?? "",
+    project_name: user.current_project_name,
+  });
+  return { ok: true, pendingId, text: formatted };
+}
+
+// deno-lint-ignore no-explicit-any
+async function handleTextEntry(config: BotConfig, message: any) {
+  const chatId = message.chat.id;
+  const telegramId = message.from.id;
+  const user = await getOrCreateUser(
+    telegramId,
+    [message.from.first_name, message.from.last_name].filter(Boolean).join(" "),
+    message.from.username ?? "",
+  );
+  if (!(await requireProject(config, chatId, user))) return;
+
+  const result = await queueTextTransaction(config, telegramId, user, message.text, "manual_text");
+  if (!result.ok) {
+    await sendMessage(config.bot_token, chatId, result.text);
+    return;
+  }
+  await sendMessage(config.bot_token, chatId, result.text, confirmKeyboard(result.pendingId));
+}
+
+// deno-lint-ignore no-explicit-any
+async function handleVoice(config: BotConfig, message: any) {
+  const chatId = message.chat.id;
+  const telegramId = message.from.id;
+  const user = await getOrCreateUser(
+    telegramId,
+    [message.from.first_name, message.from.last_name].filter(Boolean).join(" "),
+    message.from.username ?? "",
+  );
+  if (!(await requireProject(config, chatId, user))) return;
+
+  const statusMsg = await sendMessage(config.bot_token, chatId, "Ovozli xabarni tinglayapman...");
+  const statusMessageId = statusMsg.result.message_id;
+
+  const filePath = await getFilePath(config.bot_token, message.voice.file_id);
+  const audioBytes = await downloadFile(config.bot_token, filePath);
+
+  let transcript: string;
+  try {
+    transcript = await transcribeVoice(config.groq_api_key, audioBytes);
+  } catch (e) {
+    console.error("transcribeVoice failed", e);
+    await editMessageText(
+      config.bot_token,
+      chatId,
+      statusMessageId,
+      "Kechirasiz, ovozli xabarni matnga o'gira olmadim. Iltimos, matn ko'rinishida yozing.",
+    );
+    return;
+  }
+
+  if (!transcript.trim()) {
+    await editMessageText(
+      config.bot_token,
+      chatId,
+      statusMessageId,
+      "Ovozli xabardan matn chiqmadi. Iltimos, aniqroq gapirib qayta yuboring yoki matn yozing.",
+    );
+    return;
+  }
+
+  const result = await queueTextTransaction(config, telegramId, user, transcript, "voice_message");
+  const prefix = `🎤 <i>"${transcript}"</i>\n\n`;
+  if (!result.ok) {
+    await editMessageText(config.bot_token, chatId, statusMessageId, prefix + result.text);
+    return;
+  }
+  await editMessageText(
     config.bot_token,
     chatId,
-    formatPending({
-      ...parsed,
-      counterparty: parsed.counterparty ?? "",
-      project_name: user.current_project_name,
-    }),
-    confirmKeyboard(pendingId),
+    statusMessageId,
+    prefix + result.text,
+    confirmKeyboard(result.pendingId),
   );
 }
 
@@ -603,6 +672,11 @@ async function handleUpdate(config: BotConfig, update: any) {
 
   if (message.photo) {
     await handlePhoto(config, message);
+    return;
+  }
+
+  if (message.voice) {
+    await handleVoice(config, message);
     return;
   }
 

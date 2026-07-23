@@ -125,7 +125,7 @@ export interface PendingTransaction {
   description: string;
   counterparty: string;
   occurred_on: string;
-  source: "manual_text" | "receipt_photo" | "bank_statement";
+  source: "manual_text" | "receipt_photo" | "bank_statement" | "voice_message";
   project_id: number | null;
   project_name: string | null;
 }
@@ -211,7 +211,7 @@ export async function popPendingBankImport(
 
 export async function insertTransaction(params: {
   type: "income" | "expense";
-  source: "manual_text" | "receipt_photo" | "bank_statement";
+  source: "manual_text" | "receipt_photo" | "bank_statement" | "voice_message";
   amount: number;
   description: string;
   counterparty: string;

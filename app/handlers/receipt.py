@@ -40,7 +40,7 @@ async def handle_receipt_photo(message: Message) -> None:
     status_msg = await message.answer("Chekni o'qiyapman...")
 
     try:
-        parsed = await parse_receipt_image(
+        parsed_items = await parse_receipt_image(
             image_bytes, "image/jpeg", expense_cats, income_cats, date.today()
         )
     except Exception:
@@ -48,31 +48,39 @@ async def handle_receipt_photo(message: Message) -> None:
         await status_msg.edit_text("Kechirasiz, chekni o'qiy olmadim. Iltimos, aniqroq rasm yuboring.")
         return
 
-    if parsed.get("confidence") == "low":
+    valid_items = [p for p in parsed_items if p.get("confidence") != "low"]
+    if not valid_items:
         await status_msg.edit_text(
             "Chekdagi ma'lumotlarni aniq o'qiy olmadim. Iltimos, yaqinroq/tiniqroq rasm yuboring yoki "
             "matn ko'rinishida yozing."
         )
         return
 
-    pending = PendingTransaction(
-        user_db_id=user.id,
-        telegram_id=message.from_user.id,
-        type=parsed["type"],
-        amount=float(parsed["amount"]),
-        category=parsed["category"],
-        description=parsed.get("description", ""),
-        counterparty=parsed.get("counterparty", ""),
-        occurred_on=parsed["occurred_on"],
-        source=TransactionSource.receipt_photo.value,
-        project_id=user.current_project_id,
-        project_name=user.current_project.name if user.current_project else None,
-        full_name=user.full_name,
-        quantity=float(parsed.get("quantity") or 0),
-        unit=parsed.get("unit", ""),
-        unit_price=float(parsed.get("unit_price") or 0),
-        payment_type=parsed.get("payment_type", "naqd"),
-        raw_text="[chek rasmi]",
-    )
-    pending_id = add_pending_tx(pending)
-    await status_msg.edit_text(format_pending(pending), reply_markup=confirm_keyboard(pending_id))
+    pendings = []
+    for parsed in valid_items:
+        pending = PendingTransaction(
+            user_db_id=user.id,
+            telegram_id=message.from_user.id,
+            type=parsed["type"],
+            amount=float(parsed["amount"]),
+            category=parsed["category"],
+            description=parsed.get("description", ""),
+            counterparty=parsed.get("counterparty", ""),
+            occurred_on=parsed["occurred_on"],
+            source=TransactionSource.receipt_photo.value,
+            project_id=user.current_project_id,
+            project_name=user.current_project.name if user.current_project else None,
+            full_name=user.full_name,
+            quantity=float(parsed.get("quantity") or 0),
+            unit=parsed.get("unit", ""),
+            unit_price=float(parsed.get("unit_price") or 0),
+            payment_type=parsed.get("payment_type", "naqd"),
+            raw_text="[chek rasmi]",
+        )
+        pending_id = add_pending_tx(pending)
+        pendings.append((pending_id, pending))
+
+    first_id, first_pending = pendings[0]
+    await status_msg.edit_text(format_pending(first_pending), reply_markup=confirm_keyboard(first_id))
+    for pending_id, pending in pendings[1:]:
+        await status_msg.answer(format_pending(pending), reply_markup=confirm_keyboard(pending_id))

@@ -155,20 +155,25 @@ async def parse_receipt_image(
     expense_categories: list[str],
     income_categories: list[str],
     today: date,
-) -> dict:
+) -> list[dict]:
     b64_image = base64.b64encode(image_bytes).decode("utf-8")
     prompt = (
         f"Bugungi sana: {today.isoformat()}\n"
         f"Chiqim kategoriyalari: {', '.join(expense_categories)}\n"
         f"Kirim kategoriyalari: {', '.join(income_categories)}\n\n"
-        "Bu rasm - chek yoki to'lov kvitansiyasi. Undan summani, sanani va nimaga sarflanganini "
-        "aniqlab natijani qaytar. Agar chekdagi sana o'qib bo'lmasa, bugungi sanani ishlat."
+        "Bu rasm - chek, kvitansiya yoki qo'lda yozilgan xarid ro'yxati. Undan summani, sanani va "
+        "nimaga sarflanganini aniqla. Rasmda bir nechta alohida band (mahsulot/xarid qatori) bo'lishi "
+        "mumkin - masalan har bir qatorda alohida nom, miqdor va narx ko'rsatilgan bo'lishi mumkin. "
+        "Bunday holda HAR BIR bandni alohida element sifatida qaytar, birinchisini emas - hammasini. "
+        "Agar rasmda faqat bitta band bo'lsa, bitta elementli ro'yxat qaytar. Agar chekdagi sana "
+        "o'qib bo'lmasa, bugungi sanani ishlat."
     )
     parts = [
         {"inline_data": {"mime_type": media_type, "data": b64_image}},
         {"text": prompt},
     ]
-    return await _generate_json(parts, _TRANSACTION_ITEM_SCHEMA)
+    result = await _generate_json(parts, _TRANSACTIONS_SCHEMA)
+    return result["transactions"]
 
 
 async def categorize_bank_rows(

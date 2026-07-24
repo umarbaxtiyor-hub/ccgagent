@@ -62,6 +62,12 @@ async def parse_and_queue_transaction(
         source=source,
         project_id=user.current_project_id,
         project_name=user.current_project.name if user.current_project else None,
+        full_name=user.full_name,
+        quantity=float(parsed.get("quantity") or 0),
+        unit=parsed.get("unit", ""),
+        unit_price=float(parsed.get("unit_price") or 0),
+        payment_type=parsed.get("payment_type", "naqd"),
+        raw_text=text,
     )
     pending_id = add_pending_tx(pending)
     return pending_id, pending

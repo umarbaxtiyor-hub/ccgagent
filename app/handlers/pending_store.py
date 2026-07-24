@@ -22,6 +22,12 @@ class PendingTransaction:
     source: str
     project_id: int | None = None
     project_name: str | None = None
+    full_name: str = ""
+    quantity: float = 0
+    unit: str = ""
+    unit_price: float = 0
+    payment_type: str = "naqd"
+    raw_text: str = ""
 
 
 @dataclass
@@ -29,6 +35,8 @@ class PendingBankImport:
     user_db_id: int
     telegram_id: int
     project_id: int | None = None
+    project_name: str | None = None
+    full_name: str = ""
     rows: list[dict] = field(default_factory=list)
 
 

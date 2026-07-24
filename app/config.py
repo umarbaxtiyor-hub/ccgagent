@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     groq_api_key: str = ""
     database_url: str
     allowed_user_ids: str = ""
+    sheets_webhook_url: str = ""
+    sheets_webhook_secret: str = ""
 
     @field_validator("database_url")
     @classmethod

@@ -14,6 +14,7 @@ from app.handlers.keyboards import (
 from app.handlers.pending_store import get_pending_tx, pop_pending_tx
 from app.models import Transaction, TransactionSource, TransactionType
 from app.services.categories import category_names, get_or_create_category
+from app.services.sheets import append_transaction_row
 from app.services.users import get_or_create_user
 
 router = Router()
@@ -67,6 +68,23 @@ async def confirm_transaction(callback: CallbackQuery) -> None:
             )
         )
         await session.commit()
+
+    await append_transaction_row(
+        {
+            "sana": pending.occurred_on,
+            "nomi": pending.description or pending.counterparty,
+            "miqdor": pending.quantity or "",
+            "birlik": pending.unit,
+            "birim_narx": pending.unit_price or "",
+            "umumiy_summa": pending.amount,
+            "kategoriya": pending.category,
+            "kim_yozdi": pending.full_name,
+            "loyiha": pending.project_name or "",
+            "tolov_turi": pending.payment_type,
+            "asl_xabar": pending.raw_text,
+            "izoh": pending.counterparty if pending.description else "",
+        }
+    )
 
     await callback.message.edit_text(callback.message.html_text + "\n\n✅ Saqlandi.", reply_markup=None)
     await callback.answer("Saqlandi")

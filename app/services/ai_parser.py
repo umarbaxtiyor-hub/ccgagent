@@ -37,6 +37,23 @@ _TRANSACTION_SCHEMA = {
             "type": "STRING",
             "description": "Sana YYYY-MM-DD formatida. Agar matnda sana ko'rsatilmagan bo'lsa, berilgan bugungi sanani ishlating.",
         },
+        "quantity": {
+            "type": "NUMBER",
+            "description": "Agar matnda miqdor (masalan '10 litr', '5 qop') ko'rsatilgan bo'lsa shu son, aks holda 0",
+        },
+        "unit": {
+            "type": "STRING",
+            "description": "Miqdor birligi (masalan 'litr', 'qop', 'tonna', 'dona'), agar ko'rsatilmagan bo'lsa bo'sh qator",
+        },
+        "unit_price": {
+            "type": "NUMBER",
+            "description": "Agar matnda birlik narxi alohida ko'rsatilgan bo'lsa shu son (so'mda), aks holda 0",
+        },
+        "payment_type": {
+            "type": "STRING",
+            "enum": ["naqd", "bank"],
+            "description": "To'lov turi: naqd pul yoki bank orqali. Matnda ko'rsatilmagan bo'lsa 'naqd' deb ol.",
+        },
         "confidence": {
             "type": "STRING",
             "enum": ["high", "low"],

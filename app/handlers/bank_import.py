@@ -16,6 +16,7 @@ from app.models import Transaction, TransactionSource, TransactionType
 from app.services.ai_parser import categorize_bank_rows
 from app.services.bank_import import BankImportError, parse_bank_statement
 from app.services.categories import category_names, get_or_create_category
+from app.services.sheets import append_transaction_row
 from app.services.users import get_or_create_user
 
 router = Router()
@@ -96,6 +97,7 @@ async def handle_bank_statement(message: Message) -> None:
                 "type": r["type"].value,
                 "category": info.get("category", "Boshqa xarajat"),
                 "description": info.get("description", r["raw_description"]),
+                "raw_description": r["raw_description"],
             }
         )
 
@@ -103,6 +105,8 @@ async def handle_bank_statement(message: Message) -> None:
         user_db_id=user.id,
         telegram_id=message.from_user.id,
         project_id=user.current_project_id,
+        project_name=user.current_project.name if user.current_project else None,
+        full_name=user.full_name,
         rows=enriched_rows,
     )
     pending_id = add_pending_bank(pending)
@@ -144,6 +148,24 @@ async def confirm_bank_import(callback: CallbackQuery) -> None:
                 )
             )
         await session.commit()
+
+    for row in pending.rows:
+        await append_transaction_row(
+            {
+                "sana": row["occurred_on"],
+                "nomi": row["description"],
+                "miqdor": "",
+                "birlik": "",
+                "birim_narx": "",
+                "umumiy_summa": row["amount"],
+                "kategoriya": row["category"],
+                "kim_yozdi": pending.full_name,
+                "loyiha": pending.project_name or "",
+                "tolov_turi": "bank",
+                "asl_xabar": row.get("raw_description", ""),
+                "izoh": "",
+            }
+        )
 
     await callback.message.edit_text(f"✅ {len(pending.rows)} ta tranzaksiya saqlandi.", reply_markup=None)
     await callback.answer("Saqlandi")

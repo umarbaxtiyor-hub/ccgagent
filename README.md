@@ -24,6 +24,9 @@ Telegram bot orqali kunlik xarajatlar va bank hisobidan o'tadigan pullarni
   jamlanma) yuboriladi.
 - Botdan faqat `ALLOWED_USER_IDS` da ko'rsatilgan Telegram foydalanuvchilari
   foydalana oladi.
+- **Google Sheets sinxronizatsiyasi (ixtiyoriy)**: har bir tasdiqlangan
+  tranzaksiya avtomatik ravishda mavjud Google Sheet jadvaliga qator bo'lib
+  qo'shiladi (pastdagi "Google Sheetsga ulash" bo'limiga qarang).
 
 ## O'rnatish
 
@@ -87,6 +90,33 @@ bering (quyida 2-band).
    Railway HTTP javob kutib xizmatni "unhealthy" deb belgilashi mumkin).
 5. Deploy tugagach, botni Telegram'da `/start` bilan sinab ko'ring.
 
+## Google Sheetsga ulash (ixtiyoriy)
+
+Bu integratsiya Google Cloud Console / service account talab qilmaydi — faqat
+mavjud Google Sheet faylingiz ichida bir necha qadam:
+
+1. Sheet faylingizni oching → **Extensions → Apps Script**.
+2. Ochilgan muharrirdagi namunaviy kodni o'chirib, shu repodagi
+   `docs/google_sheets_webapp.gs` faylining butun mazmunini joylashtiring.
+3. Skript boshidagi `SECRET` qiymatini o'zingiz o'ylab topgan uzun, tasodifiy
+   matn bilan almashtiring (bu — botning sizning jadvalingizga yozish uchun
+   "paroli"). `SHEET_NAME` qiymati jadvaldagi qatorlar yoziladigan varaq nomi
+   bilan bir xil bo'lishi kerak (masalan `Xarajatlar`), va o'sha varaqda
+   quyidagi tartibda sarlavha qatori bo'lishi shart:
+   `Sana, Nomi / material, Miqdor, Birlik, Birim narx, Umumiy summa,
+   Kategoriya, Kim yozdi, Loyiha, To'lov turi, Asl xabar, Izoh`.
+4. **Deploy → New deployment** → turi **Web app**: "Execute as" = **Me**,
+   "Who has access" = **Anyone**. Deploy tugmasini bosing va hosil bo'lgan
+   Web App URL manzilini nusxalab oling.
+5. Botning muhit o'zgaruvchilariga (Railway → Variables) qo'shing:
+   - `SHEETS_WEBHOOK_URL` — 4-qadamdagi Web App URL
+   - `SHEETS_WEBHOOK_SECRET` — 3-qadamda o'rnatgan SECRET qiymati
+
+Shundan so'ng har bir tasdiqlangan tranzaksiya (matn, ovoz, chek, bank
+ko'chirmasi) avtomatik shu jadvalga qator bo'lib qo'shiladi. Agar bu ikki
+o'zgaruvchi bo'sh qoldirilsa, sinxronizatsiya oddiygina o'chiq turadi — bot
+ishlashiga ta'sir qilmaydi.
+
 ## Loyiha tuzilishi
 
 ```
@@ -108,6 +138,9 @@ app/
     categories.py        - standart kategoriyalar
     projects.py           - loyiha (obyekt) CRUD
     users.py              - foydalanuvchi CRUD
+    sheets.py              - tasdiqlangan tranzaksiyalarni Google Sheetsga yuborish
+docs/
+  google_sheets_webapp.gs - Google Apps Script Web App kodi (Sheetsga ulash uchun)
 ```
 
 ## Kategoriyalar

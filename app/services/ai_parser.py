@@ -9,7 +9,7 @@ from app.config import settings
 
 _GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
-_TRANSACTION_SCHEMA = {
+_TRANSACTION_ITEM_SCHEMA = {
     "type": "OBJECT",
     "properties": {
         "type": {
@@ -61,6 +61,18 @@ _TRANSACTION_SCHEMA = {
         },
     },
     "required": ["type", "amount", "category", "description", "occurred_on", "confidence"],
+}
+
+_TRANSACTIONS_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "transactions": {
+            "type": "ARRAY",
+            "description": "Xabardagi har bir alohida xarajat/kirim uchun bitta element",
+            "items": _TRANSACTION_ITEM_SCHEMA,
+        }
+    },
+    "required": ["transactions"],
 }
 
 _BANK_ROWS_SCHEMA = {
@@ -116,7 +128,7 @@ async def parse_expense_text(
     expense_categories: list[str],
     income_categories: list[str],
     today: date,
-) -> dict:
+) -> list[dict]:
     prompt = (
         f"Bugungi sana: {today.isoformat()}\n"
         f"Chiqim kategoriyalari: {', '.join(expense_categories)}\n"
@@ -125,10 +137,16 @@ async def parse_expense_text(
         "ko'rsatiladi (masalan \"10 litrdan 80 mingdan\" yoki \"5 qop 60 ming dan\") - bunday holatda "
         "ularni ko'paytirib umumiy summani hisobla (10 x 80000 = 800000). Faqat summani ikkala tomon "
         "ham noaniq bo'lganda 'low' confidence qo'y.\n\n"
+        "Muhim: xabarda bir nechta alohida xarajat/kirim aytilgan bo'lishi mumkin (vergul, yangi qator, "
+        "\"va\", raqamlangan ro'yxat va h.k. bilan ajratilgan bo'lishi mumkin, masalan \"sement uchun "
+        "500000, benzin uchun 100000\"). Bunday holda HAR BIRINI alohida element sifatida qaytar - "
+        "birinchisini emas, hammasini. Agar xabarda faqat bitta xarajat/kirim bo'lsa, bitta elementli "
+        "ro'yxat qaytar.\n\n"
         f"Quyidagi xabarni tahlil qil:\n"
         f'"{text}"'
     )
-    return await _generate_json([{"text": prompt}], _TRANSACTION_SCHEMA)
+    result = await _generate_json([{"text": prompt}], _TRANSACTIONS_SCHEMA)
+    return result["transactions"]
 
 
 async def parse_receipt_image(
@@ -150,7 +168,7 @@ async def parse_receipt_image(
         {"inline_data": {"mime_type": media_type, "data": b64_image}},
         {"text": prompt},
     ]
-    return await _generate_json(parts, _TRANSACTION_SCHEMA)
+    return await _generate_json(parts, _TRANSACTION_ITEM_SCHEMA)
 
 
 async def categorize_bank_rows(

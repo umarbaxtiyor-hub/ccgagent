@@ -5,7 +5,7 @@ from aiogram.types import CallbackQuery, Message
 
 from app.access import AllowedUser
 from app.db import async_session
-from app.handlers.common import parse_and_queue_transaction, require_project
+from app.handlers.common import parse_and_queue_transactions, require_project
 from app.handlers.keyboards import (
     category_choice_keyboard,
     confirm_keyboard,
@@ -32,15 +32,16 @@ async def handle_text_entry(message: Message) -> None:
         if not await require_project(session, message, user):
             return
 
-        pending_id, result = await parse_and_queue_transaction(
+        result = await parse_and_queue_transactions(
             session, user, message.text, TransactionSource.manual_text.value
         )
 
-    if pending_id is None:
+    if isinstance(result, str):
         await message.answer(result)
         return
 
-    await message.answer(format_pending(result), reply_markup=confirm_keyboard(pending_id))
+    for pending_id, pending in result:
+        await message.answer(format_pending(pending), reply_markup=confirm_keyboard(pending_id))
 
 
 @router.callback_query(F.data.startswith("tx_confirm:"))

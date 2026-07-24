@@ -42,6 +42,7 @@ class PendingBankImport:
 
 _pending_tx: dict[str, PendingTransaction] = {}
 _pending_bank: dict[str, PendingBankImport] = {}
+_pending_tx_batch: dict[str, list[PendingTransaction]] = {}
 
 
 def add_pending_tx(data: PendingTransaction) -> str:
@@ -70,3 +71,13 @@ def get_pending_bank(key: str) -> PendingBankImport | None:
 
 def pop_pending_bank(key: str) -> PendingBankImport | None:
     return _pending_bank.pop(key, None)
+
+
+def add_pending_tx_batch(items: list[PendingTransaction]) -> str:
+    key = uuid.uuid4().hex[:12]
+    _pending_tx_batch[key] = items
+    return key
+
+
+def pop_pending_tx_batch(key: str) -> list[PendingTransaction] | None:
+    return _pending_tx_batch.pop(key, None)

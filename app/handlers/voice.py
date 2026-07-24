@@ -6,7 +6,13 @@ from aiogram.types import Message
 from app.access import AllowedUser
 from app.db import async_session
 from app.handlers.common import parse_and_queue_transactions, require_project
-from app.handlers.keyboards import confirm_keyboard, format_pending
+from app.handlers.keyboards import (
+    batch_confirm_keyboard,
+    confirm_keyboard,
+    format_pending,
+    format_pending_batch,
+)
+from app.handlers.pending_store import add_pending_tx, add_pending_tx_batch
 from app.models import TransactionSource
 from app.services.stt import transcribe_voice
 from app.services.users import get_or_create_user
@@ -64,7 +70,11 @@ async def handle_voice(message: Message) -> None:
         await status_msg.edit_text(prefix + result)
         return
 
-    first_id, first_pending = result[0]
-    await status_msg.edit_text(prefix + format_pending(first_pending), reply_markup=confirm_keyboard(first_id))
-    for pending_id, pending in result[1:]:
-        await status_msg.answer(format_pending(pending), reply_markup=confirm_keyboard(pending_id))
+    if len(result) == 1:
+        pending = result[0]
+        pending_id = add_pending_tx(pending)
+        await status_msg.edit_text(prefix + format_pending(pending), reply_markup=confirm_keyboard(pending_id))
+        return
+
+    batch_id = add_pending_tx_batch(result)
+    await status_msg.edit_text(prefix + format_pending_batch(result), reply_markup=batch_confirm_keyboard(batch_id))

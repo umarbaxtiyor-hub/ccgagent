@@ -7,8 +7,13 @@ from aiogram.types import Message
 from app.access import AllowedUser
 from app.db import async_session
 from app.handlers.common import require_project
-from app.handlers.keyboards import confirm_keyboard, format_pending
-from app.handlers.pending_store import PendingTransaction, add_pending_tx
+from app.handlers.keyboards import (
+    batch_confirm_keyboard,
+    confirm_keyboard,
+    format_pending,
+    format_pending_batch,
+)
+from app.handlers.pending_store import PendingTransaction, add_pending_tx, add_pending_tx_batch
 from app.models import TransactionSource, TransactionType
 from app.services.ai_parser import parse_receipt_image
 from app.services.categories import category_names
@@ -56,9 +61,8 @@ async def handle_receipt_photo(message: Message) -> None:
         )
         return
 
-    pendings = []
-    for parsed in valid_items:
-        pending = PendingTransaction(
+    pendings = [
+        PendingTransaction(
             user_db_id=user.id,
             telegram_id=message.from_user.id,
             type=parsed["type"],
@@ -77,10 +81,14 @@ async def handle_receipt_photo(message: Message) -> None:
             payment_type=parsed.get("payment_type", "naqd"),
             raw_text="[chek rasmi]",
         )
-        pending_id = add_pending_tx(pending)
-        pendings.append((pending_id, pending))
+        for parsed in valid_items
+    ]
 
-    first_id, first_pending = pendings[0]
-    await status_msg.edit_text(format_pending(first_pending), reply_markup=confirm_keyboard(first_id))
-    for pending_id, pending in pendings[1:]:
-        await status_msg.answer(format_pending(pending), reply_markup=confirm_keyboard(pending_id))
+    if len(pendings) == 1:
+        pending = pendings[0]
+        pending_id = add_pending_tx(pending)
+        await status_msg.edit_text(format_pending(pending), reply_markup=confirm_keyboard(pending_id))
+        return
+
+    batch_id = add_pending_tx_batch(pendings)
+    await status_msg.edit_text(format_pending_batch(pendings), reply_markup=batch_confirm_keyboard(batch_id))

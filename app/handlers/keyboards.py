@@ -30,6 +30,15 @@ def category_choice_keyboard(pending_id: str, categories: list[str]) -> InlineKe
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def batch_confirm_keyboard(batch_id: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Barchasini tasdiqlash", callback_data=f"txb_confirm:{batch_id}")],
+            [InlineKeyboardButton(text="Bekor qilish", callback_data=f"txb_cancel:{batch_id}")],
+        ]
+    )
+
+
 def bank_import_keyboard(pending_id: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -75,4 +84,29 @@ def format_pending(p: PendingTransaction) -> str:
     if p.counterparty:
         lines.append(f"Kontragent: {p.counterparty}")
     lines.append("\nTasdiqlaysizmi?")
+    return "\n".join(lines)
+
+
+def format_pending_batch(items: list[PendingTransaction]) -> str:
+    lines = [f"<b>{len(items)} ta yozuv topildi</b> (Loyiha: {items[0].project_name or '-'}):\n"]
+    total_expense = 0.0
+    total_income = 0.0
+    for i, p in enumerate(items, start=1):
+        type_label = "Kirim" if p.type == "income" else "Chiqim"
+        amount_str = f"{p.amount:,.0f}".replace(",", " ")
+        line = f"{i}. {type_label}: {amount_str} so'm - {p.category}"
+        if p.description:
+            line += f" ({p.description})"
+        lines.append(line)
+        if p.type == "income":
+            total_income += p.amount
+        else:
+            total_expense += p.amount
+
+    lines.append("")
+    if total_expense:
+        lines.append(f"Jami chiqim: {total_expense:,.0f} so'm".replace(",", " "))
+    if total_income:
+        lines.append(f"Jami kirim: {total_income:,.0f} so'm".replace(",", " "))
+    lines.append("\nBarchasini tasdiqlaysizmi?")
     return "\n".join(lines)

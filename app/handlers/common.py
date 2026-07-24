@@ -5,7 +5,7 @@ from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.handlers.keyboards import project_list_keyboard
-from app.handlers.pending_store import PendingTransaction, add_pending_tx
+from app.handlers.pending_store import PendingTransaction
 from app.models import TransactionType, User
 from app.services.ai_parser import parse_expense_text
 from app.services.categories import category_names
@@ -33,8 +33,12 @@ async def require_project(session: AsyncSession, message: Message, user: User) -
 
 async def parse_and_queue_transactions(
     session: AsyncSession, user: User, text: str, source: str
-) -> list[tuple[str, PendingTransaction]] | str:
-    """Returns a non-empty list of (pending_id, pending) on success, or an error message string."""
+) -> list[PendingTransaction] | str:
+    """Returns a non-empty list of PendingTransaction on success, or an error message string.
+
+    Callers decide whether to register each item individually (single-item case)
+    or as a batch (multi-item case) in the pending store.
+    """
     expense_cats = await category_names(session, TransactionType.expense)
     income_cats = await category_names(session, TransactionType.income)
 
@@ -51,9 +55,8 @@ async def parse_and_queue_transactions(
             "qayta yozing: \"Sement uchun 500000 so'm to'ladim\"."
         )
 
-    results: list[tuple[str, PendingTransaction]] = []
-    for parsed in valid_items:
-        pending = PendingTransaction(
+    return [
+        PendingTransaction(
             user_db_id=user.id,
             telegram_id=user.telegram_id,
             type=parsed["type"],
@@ -72,6 +75,5 @@ async def parse_and_queue_transactions(
             payment_type=parsed.get("payment_type", "naqd"),
             raw_text=text,
         )
-        pending_id = add_pending_tx(pending)
-        results.append((pending_id, pending))
-    return results
+        for parsed in valid_items
+    ]

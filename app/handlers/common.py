@@ -1,3 +1,4 @@
+import logging
 from datetime import date
 
 from aiogram.types import Message
@@ -9,6 +10,8 @@ from app.models import TransactionType, User
 from app.services.ai_parser import parse_expense_text
 from app.services.categories import category_names
 from app.services.projects import list_projects
+
+logger = logging.getLogger(__name__)
 
 
 async def require_project(session: AsyncSession, message: Message, user: User) -> bool:
@@ -38,6 +41,7 @@ async def parse_and_queue_transaction(
     try:
         parsed = await parse_expense_text(text, expense_cats, income_cats, date.today())
     except Exception:
+        logger.exception("parse_expense_text failed for text=%r", text)
         return None, "Kechirasiz, xabaringizni tahlil qila olmadim. Iltimos, summani va nima uchunligini aniqroq yozing."
 
     if parsed.get("confidence") == "low":

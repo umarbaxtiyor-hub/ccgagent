@@ -1,3 +1,5 @@
+import logging
+
 from aiogram import F, Router
 from aiogram.types import CallbackQuery, Message
 
@@ -17,6 +19,7 @@ from app.services.categories import category_names, get_or_create_category
 from app.services.users import get_or_create_user
 
 router = Router()
+logger = logging.getLogger(__name__)
 
 _ALLOWED_EXT = (".xlsx", ".xls", ".csv")
 
@@ -52,6 +55,7 @@ async def handle_bank_statement(message: Message) -> None:
         await status_msg.edit_text(str(e))
         return
     except Exception:
+        logger.exception("parse_bank_statement failed")
         await status_msg.edit_text("Faylni o'qishda xatolik yuz berdi. Fayl formatini tekshiring.")
         return
 
@@ -75,6 +79,7 @@ async def handle_bank_statement(message: Message) -> None:
     try:
         categorized = await categorize_bank_rows(ai_input, expense_cats, income_cats)
     except Exception:
+        logger.exception("categorize_bank_rows failed")
         await status_msg.edit_text("Tranzaksiyalarni kategoriyalashda xatolik yuz berdi. Qayta urinib ko'ring.")
         return
 

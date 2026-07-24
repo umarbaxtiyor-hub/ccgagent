@@ -3,59 +3,95 @@ import json
 from datetime import date
 from typing import Any
 
-from anthropic import AsyncAnthropic
+import aiohttp
 
 from app.config import settings
 
-_client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+_GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
-_TRANSACTION_TOOL = {
-    "name": "record_transaction",
-    "description": "Qurilish kompaniyasi uchun kirim yoki chiqim tranzaksiyasini tuzilgan ko'rinishda qaytaradi.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "type": {
-                "type": "string",
-                "enum": ["income", "expense"],
-                "description": "income = kirim (pul kelishi), expense = chiqim (xarajat)",
-            },
-            "amount": {
-                "type": "number",
-                "description": "Summasi (faqat raqam, valyuta belgisisiz), so'mda",
-            },
-            "category": {
-                "type": "string",
-                "description": "Berilgan kategoriyalar ro'yxatidan eng mos kelgani, aks holda 'Boshqa xarajat' yoki 'Boshqa daromad'",
-            },
-            "description": {
-                "type": "string",
-                "description": "Qisqa tavsif (nima uchun to'lov/kirim)",
-            },
-            "counterparty": {
-                "type": "string",
-                "description": "To'lov qilingan/qabul qilingan tomon (agar mavjud bo'lsa), aks holda bo'sh qatr",
-            },
-            "occurred_on": {
-                "type": "string",
-                "description": "Sana YYYY-MM-DD formatida. Agar matnda sana ko'rsatilmagan bo'lsa, berilgan bugungi sanani ishlating.",
-            },
-            "confidence": {
-                "type": "string",
-                "enum": ["high", "low"],
-                "description": "Agar matn tushunarsiz yoki summa aniq bo'lmasa 'low', aks holda 'high'",
-            },
+_TRANSACTION_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "type": {
+            "type": "STRING",
+            "enum": ["income", "expense"],
+            "description": "income = kirim (pul kelishi), expense = chiqim (xarajat)",
         },
-        "required": ["type", "amount", "category", "description", "occurred_on", "confidence"],
+        "amount": {
+            "type": "NUMBER",
+            "description": "Summasi (faqat raqam, valyuta belgisisiz), so'mda",
+        },
+        "category": {
+            "type": "STRING",
+            "description": "Berilgan kategoriyalar ro'yxatidan eng mos kelgani, aks holda 'Boshqa xarajat' yoki 'Boshqa daromad'",
+        },
+        "description": {
+            "type": "STRING",
+            "description": "Qisqa tavsif (nima uchun to'lov/kirim)",
+        },
+        "counterparty": {
+            "type": "STRING",
+            "description": "To'lov qilingan/qabul qilingan tomon (agar mavjud bo'lsa), aks holda bo'sh qatr",
+        },
+        "occurred_on": {
+            "type": "STRING",
+            "description": "Sana YYYY-MM-DD formatida. Agar matnda sana ko'rsatilmagan bo'lsa, berilgan bugungi sanani ishlating.",
+        },
+        "confidence": {
+            "type": "STRING",
+            "enum": ["high", "low"],
+            "description": "Agar matn tushunarsiz yoki summa aniq bo'lmasa 'low', aks holda 'high'",
+        },
     },
+    "required": ["type", "amount", "category", "description", "occurred_on", "confidence"],
+}
+
+_BANK_ROWS_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "results": {
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": {
+                    "row_index": {"type": "INTEGER"},
+                    "category": {"type": "STRING"},
+                    "description": {"type": "STRING"},
+                },
+                "required": ["row_index", "category", "description"],
+            },
+        }
+    },
+    "required": ["results"],
 }
 
 
-def _extract_tool_input(message: Any) -> dict:
-    for block in message.content:
-        if block.type == "tool_use":
-            return block.input
-    raise ValueError("AI javobida tool_use bloki topilmadi")
+async def _generate_json(parts: list[dict[str, Any]], schema: dict[str, Any]) -> dict:
+    url = _GEMINI_API_URL.format(model=settings.gemini_model)
+    payload = {
+        "contents": [{"role": "user", "parts": parts}],
+        "generationConfig": {
+            "response_mime_type": "application/json",
+            "response_schema": schema,
+        },
+    }
+    async with aiohttp.ClientSession() as session:
+        async with session.post(
+            url,
+            params={"key": settings.gemini_api_key},
+            json=payload,
+            timeout=aiohttp.ClientTimeout(total=60),
+        ) as resp:
+            if resp.status != 200:
+                text = await resp.text()
+                raise RuntimeError(f"Gemini API error {resp.status}: {text}")
+            data = await resp.json()
+
+    try:
+        text = data["candidates"][0]["content"]["parts"][0]["text"]
+    except (KeyError, IndexError) as e:
+        raise ValueError(f"Gemini javobida matn topilmadi: {data}") from e
+    return json.loads(text)
 
 
 async def parse_expense_text(
@@ -72,17 +108,10 @@ async def parse_expense_text(
         "ko'rsatiladi (masalan \"10 litrdan 80 mingdan\" yoki \"5 qop 60 ming dan\") - bunday holatda "
         "ularni ko'paytirib umumiy summani hisobla (10 x 80000 = 800000). Faqat summani ikkala tomon "
         "ham noaniq bo'lganda 'low' confidence qo'y.\n\n"
-        f"Quyidagi xabarni tahlil qil va record_transaction tool orqali natijani qaytar:\n"
+        f"Quyidagi xabarni tahlil qil:\n"
         f'"{text}"'
     )
-    message = await _client.messages.create(
-        model=settings.anthropic_model,
-        max_tokens=1024,
-        tools=[_TRANSACTION_TOOL],
-        tool_choice={"type": "tool", "name": "record_transaction"},
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return _extract_tool_input(message)
+    return await _generate_json([{"text": prompt}], _TRANSACTION_SCHEMA)
 
 
 async def parse_receipt_image(
@@ -98,52 +127,13 @@ async def parse_receipt_image(
         f"Chiqim kategoriyalari: {', '.join(expense_categories)}\n"
         f"Kirim kategoriyalari: {', '.join(income_categories)}\n\n"
         "Bu rasm - chek yoki to'lov kvitansiyasi. Undan summani, sanani va nimaga sarflanganini "
-        "aniqlab, record_transaction tool orqali natijani qaytar. Agar chekdagi sana o'qib bo'lmasa, "
-        "bugungi sanani ishlat."
+        "aniqlab natijani qaytar. Agar chekdagi sana o'qib bo'lmasa, bugungi sanani ishlat."
     )
-    message = await _client.messages.create(
-        model=settings.anthropic_model,
-        max_tokens=1024,
-        tools=[_TRANSACTION_TOOL],
-        tool_choice={"type": "tool", "name": "record_transaction"},
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "source": {"type": "base64", "media_type": media_type, "data": b64_image},
-                    },
-                    {"type": "text", "text": prompt},
-                ],
-            }
-        ],
-    )
-    return _extract_tool_input(message)
-
-
-_BANK_ROW_TOOL = {
-    "name": "categorize_bank_rows",
-    "description": "Bank ko'chirmasidagi har bir qatorga kirim/chiqim kategoriyasini biriktiradi.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "results": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "row_index": {"type": "integer"},
-                        "category": {"type": "string"},
-                        "description": {"type": "string"},
-                    },
-                    "required": ["row_index", "category", "description"],
-                },
-            }
-        },
-        "required": ["results"],
-    },
-}
+    parts = [
+        {"inline_data": {"mime_type": media_type, "data": b64_image}},
+        {"text": prompt},
+    ]
+    return await _generate_json(parts, _TRANSACTION_SCHEMA)
 
 
 async def categorize_bank_rows(
@@ -156,15 +146,8 @@ async def categorize_bank_rows(
         f"Chiqim kategoriyalari: {', '.join(expense_categories)}\n"
         f"Kirim kategoriyalari: {', '.join(income_categories)}\n\n"
         "Quyidagi bank tranzaksiyalari ro'yxati berilgan (JSON). Har biriga eng mos kategoriyani "
-        "va qisqa tushunarli tavsifni tanla, keyin categorize_bank_rows tool orqali natijani qaytar:\n\n"
+        "va qisqa tushunarli tavsifni tanla:\n\n"
         f"{json.dumps(rows, ensure_ascii=False)}"
     )
-    message = await _client.messages.create(
-        model=settings.anthropic_model,
-        max_tokens=4096,
-        tools=[_BANK_ROW_TOOL],
-        tool_choice={"type": "tool", "name": "categorize_bank_rows"},
-        messages=[{"role": "user", "content": prompt}],
-    )
-    parsed = _extract_tool_input(message)
+    parsed = await _generate_json([{"text": prompt}], _BANK_ROWS_SCHEMA)
     return {item["row_index"]: item for item in parsed["results"]}

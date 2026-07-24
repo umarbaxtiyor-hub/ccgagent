@@ -6,7 +6,7 @@ Telegram bot orqali kunlik xarajatlar va bank hisobidan o'tadigan pullarni
 ## Imkoniyatlar
 
 - **Erkin matn**: xodim botga "Sement uchun 500000 so'm to'ladim" kabi xabar
-  yozadi, AI (Claude) summani, turini (kirim/chiqim) va kategoriyasini o'zi
+  yozadi, AI (Gemini) summani, turini (kirim/chiqim) va kategoriyasini o'zi
   aniqlaydi. Saqlashdan oldin tasdiqlash so'raladi.
 - **Chek/kvitansiya rasmi**: rasm yuborilsa, AI undan summa va tafsilotlarni
   o'qib oladi (vision).
@@ -29,7 +29,7 @@ Telegram bot orqali kunlik xarajatlar va bank hisobidan o'tadigan pullarni
 
 1. `.env.example` faylini `.env` ga nusxalab, quyidagilarni to'ldiring:
    - `BOT_TOKEN` — @BotFather dan olingan token
-   - `ANTHROPIC_API_KEY` — Anthropic API kaliti
+   - `GEMINI_API_KEY` — Google AI Studio (aistudio.google.com) dan olingan kalit
    - `GROQ_API_KEY` — ovozli xabarlarni matnga o'girish uchun (ixtiyoriy,
      bo'sh qoldirilsa ovoz funksiyasi ishlamaydi)
    - `DATABASE_URL` — Postgres ulanish satri
@@ -76,8 +76,8 @@ bering (quyida 2-band).
      beradi — kod uni o'zi `postgresql+asyncpg://` ga o'giradi.
 3. Bot xizmatining "Variables" bo'limida qo'shing:
    - `BOT_TOKEN`
-   - `ANTHROPIC_API_KEY`
-   - `ANTHROPIC_MODEL` (ixtiyoriy, standart: `claude-sonnet-5`)
+   - `GEMINI_API_KEY`
+   - `GEMINI_MODEL` (ixtiyoriy, standart: `gemini-flash-latest`)
    - `GROQ_API_KEY` (ovozli xabarlar uchun)
    - `ALLOWED_USER_IDS`
    - `DATABASE_URL` (yuqoridagi 2-band)
@@ -101,7 +101,7 @@ app/
     start.py, text_entry.py, receipt.py, voice.py, bank_import.py,
     projects.py, reports.py - har bir kiritish turi uchun handlerlar
   services/
-    ai_parser.py        - Claude orqali matn/rasm/bank qatorlarini tahlil
+    ai_parser.py        - Gemini orqali matn/rasm/bank qatorlarini tahlil
     stt.py                - Groq (Whisper) orqali ovozni matnga o'girish
     bank_import.py       - bank ko'chirmasi fayllarini o'qish
     excel_export.py      - hisobot Excel fayl generatsiyasi

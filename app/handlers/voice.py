@@ -1,3 +1,5 @@
+import logging
+
 from aiogram import F, Router
 from aiogram.types import Message
 
@@ -10,6 +12,7 @@ from app.services.stt import transcribe_voice
 from app.services.users import get_or_create_user
 
 router = Router()
+logger = logging.getLogger(__name__)
 
 
 @router.message(F.voice, AllowedUser())
@@ -33,6 +36,7 @@ async def handle_voice(message: Message) -> None:
     try:
         transcript = await transcribe_voice(audio_bytes)
     except Exception:
+        logger.exception("transcribe_voice failed")
         await status_msg.edit_text(
             "Kechirasiz, ovozli xabarni matnga o'gira olmadim. Iltimos, matn ko'rinishida yozing."
         )

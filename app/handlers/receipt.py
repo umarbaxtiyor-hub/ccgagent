@@ -1,3 +1,4 @@
+import logging
 from datetime import date
 
 from aiogram import F, Router
@@ -14,6 +15,7 @@ from app.services.categories import category_names
 from app.services.users import get_or_create_user
 
 router = Router()
+logger = logging.getLogger(__name__)
 
 
 @router.message(F.photo, AllowedUser())
@@ -42,6 +44,7 @@ async def handle_receipt_photo(message: Message) -> None:
             image_bytes, "image/jpeg", expense_cats, income_cats, date.today()
         )
     except Exception:
+        logger.exception("parse_receipt_image failed")
         await status_msg.edit_text("Kechirasiz, chekni o'qiy olmadim. Iltimos, aniqroq rasm yuboring.")
         return
 

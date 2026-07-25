@@ -43,7 +43,11 @@ _TRANSACTION_ITEM_SCHEMA = {
         },
         "unit": {
             "type": "STRING",
-            "description": "Miqdor birligi (masalan 'litr', 'qop', 'tonna', 'dona'), agar ko'rsatilmagan bo'lsa bo'sh qator",
+            "description": (
+                "Miqdor birligi. Iloji boricha shu standart birliklardan birini ishlat: "
+                "'litr', 'kg', 'm2', 'm3', 'dona', 'kun', 'qop', 'tonna'. Agar matnda "
+                "ko'rsatilmagan bo'lsa bo'sh qator."
+            ),
         },
         "unit_price": {
             "type": "NUMBER",

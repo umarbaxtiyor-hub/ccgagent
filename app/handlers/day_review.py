@@ -32,31 +32,57 @@ def _fmt_amount(amount: float) -> str:
     return f"{amount:,.0f}"
 
 
-_CAT_WIDTH = 11
-_NAME_WIDTH = 10
-_SEP = "-" * (3 + _CAT_WIDTH + _NAME_WIDTH + 6 + 1 + 10)
+_CATEGORY_ABBR = {
+    "Oziq-ovqat": "Ozuqa",
+    "Qurilish materiallari": "Material",
+    "Texnika va asboblar": "Texnika",
+    "Ijara": "Ijara",
+    "Ish haqi": "Ish haqi",
+    "Usta xizmati": "Usta",
+    "Transport": "Transp",
+    "Kommunal to'lovlar": "Kommunal",
+    "Soliq va yig'imlar": "Soliq",
+    "Boshqa xarajat": "Boshqa",
+    "Mijoz to'lovi": "Mijoz",
+    "Kredit / investitsiya": "Kredit",
+    "Boshqa daromad": "Boshqa",
+}
 
 
-def _table_row(idx: int, category: str, name: str, qty: float, amount: float) -> str:
-    display_cat = h(category)[:_CAT_WIDTH]
+def _abbr_category(name: str) -> str:
+    if name in _CATEGORY_ABBR:
+        return _CATEGORY_ABBR[name]
+    return name.split()[0] if name else "-"
+
+
+_CAT_WIDTH = 8
+_NAME_WIDTH = 8
+_UNIT_WIDTH = 5
+_SEP = "-" * (3 + _CAT_WIDTH + _NAME_WIDTH + 5 + 1 + _UNIT_WIDTH + 1 + 10)
+
+
+def _table_row(idx: int, category: str, name: str, qty: float, unit: str, amount: float) -> str:
+    display_cat = h(_abbr_category(category))[:_CAT_WIDTH]
     display_name = h(name)[:_NAME_WIDTH]
-    qty_str = f"({qty:g}x)" if qty else "-"
+    qty_str = f"{qty:g}" if qty else "-"
+    display_unit = h(unit)[:_UNIT_WIDTH]
     return (
         f"{idx:02d} {display_cat:<{_CAT_WIDTH}}{display_name:<{_NAME_WIDTH}}"
-        f"{qty_str:>6} {_fmt_amount(amount):>10}"
+        f"{qty_str:>5} {display_unit:<{_UNIT_WIDTH}}{_fmt_amount(amount):>10}"
     )
 
 
-def _build_table(items: list[tuple[str, str, float, float, str]]) -> list[str]:
-    """items: (category, name, qty, amount, type) where type is 'income'/'expense'."""
+def _build_table(items: list[tuple[str, str, float, str, float, str]]) -> list[str]:
+    """items: (category, name, qty, unit, amount, type) where type is 'income'/'expense'."""
     header = (
-        f"{'№':<3}{'Kategoriya':<{_CAT_WIDTH}}{'Nomi':<{_NAME_WIDTH}}{'Miqdor':>6} {'Summa':>10}"
+        f"{'№':<3}{'Kat.':<{_CAT_WIDTH}}{'Nomi':<{_NAME_WIDTH}}"
+        f"{'Miqd':>5} {'Birl':<{_UNIT_WIDTH}}{'Summa':>10}"
     )
     table_lines = [_SEP, header, _SEP]
     total_income = 0.0
     total_expense = 0.0
-    for i, (category, name, qty, amount, type_) in enumerate(items, start=1):
-        table_lines.append(_table_row(i, category, name, qty, amount))
+    for i, (category, name, qty, unit, amount, type_) in enumerate(items, start=1):
+        table_lines.append(_table_row(i, category, name, qty, unit, amount))
         if type_ == "income":
             total_income += amount
         else:
@@ -70,25 +96,45 @@ def _build_table(items: list[tuple[str, str, float, float, str]]) -> list[str]:
 
 
 def _project_header(project_name: str, reporter_name: str) -> str:
-    today_str = date.today().strftime("%d.%m.%Y")
-    return f"📋 LOYIHA: {h(project_name)}\n👤 XODIM: {h(reporter_name)}\n📅 SANA: {today_str}"
+    return f"📋 LOYIHA: {h(project_name)}\n👤 XODIM: {h(reporter_name)}"
+
+
+def _date_block(date_str: str, items: list[tuple[str, str, float, str, float, str]]) -> str:
+    table = "<pre>" + "\n".join(_build_table(items)) + "</pre>"
+    return f"📅 SANA: {date_str}\n" + table
 
 
 def format_daily_text_report(rows: list[dict], reporter_name: str) -> str:
     """Monospace, receipt-style daily report for the CEO: one block per
-    project with a Nomi/Miqdor/Summa table and kirim/chiqim/balans totals."""
+    project, each split by day so kirim/chiqim/balans are per-day totals."""
     by_project: dict[str, list[dict]] = defaultdict(list)
     for row in rows:
         by_project[row.get("loyiha") or "-"].append(row)
 
     sections = []
     for project_name, project_rows in by_project.items():
-        items = [
-            (r.get("kategoriya") or "-", r.get("nomi") or "-", r.get("miqdor") or 0, r["umumiy_summa"], r["_type"])
-            for r in sorted(project_rows, key=lambda r: 0 if r["_type"] == "expense" else 1)
-        ]
-        table = "<pre>" + "\n".join(_build_table(items)) + "</pre>"
-        sections.append(_project_header(project_name, reporter_name) + "\n\n" + table)
+        by_date: dict[str, list[dict]] = defaultdict(list)
+        for r in project_rows:
+            by_date[r["sana"]].append(r)
+
+        date_blocks = []
+        for sana in sorted(by_date):
+            date_rows = sorted(by_date[sana], key=lambda r: 0 if r["_type"] == "expense" else 1)
+            items = [
+                (
+                    r.get("kategoriya") or "-",
+                    r.get("nomi") or "-",
+                    r.get("miqdor") or 0,
+                    r.get("birlik") or "",
+                    r["umumiy_summa"],
+                    r["_type"],
+                )
+                for r in date_rows
+            ]
+            date_str = date.fromisoformat(sana).strftime("%d.%m.%Y")
+            date_blocks.append(_date_block(date_str, items))
+
+        sections.append(_project_header(project_name, reporter_name) + "\n\n" + "\n\n".join(date_blocks))
 
     return "\n\n".join(sections)
 
@@ -105,18 +151,26 @@ def format_day_review(transactions: list[Transaction]) -> str:
 
     sections = []
     for project_name, items in by_project.items():
-        table_items = [
-            (
-                t.category.name if t.category else "-",
-                t.description or t.counterparty or "-",
-                float(t.quantity or 0),
-                float(t.amount),
-                t.type.value,
-            )
-            for t in items
-        ]
-        table = "<pre>" + "\n".join(_build_table(table_items)) + "</pre>"
-        sections.append(_project_header(project_name, reporter_name) + "\n\n" + table)
+        by_date: dict[date, list[Transaction]] = defaultdict(list)
+        for t in items:
+            by_date[t.occurred_on].append(t)
+
+        date_blocks = []
+        for occurred_on in sorted(by_date):
+            table_items = [
+                (
+                    t.category.name if t.category else "-",
+                    t.description or t.counterparty or "-",
+                    float(t.quantity or 0),
+                    t.unit or "",
+                    float(t.amount),
+                    t.type.value,
+                )
+                for t in by_date[occurred_on]
+            ]
+            date_blocks.append(_date_block(occurred_on.strftime("%d.%m.%Y"), table_items))
+
+        sections.append(_project_header(project_name, reporter_name) + "\n\n" + "\n\n".join(date_blocks))
 
     return "\n\n".join(sections)
 

@@ -4,6 +4,7 @@ from datetime import date
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.handlers.keyboards import project_list_keyboard
 from app.models import Transaction, TransactionSource, TransactionType, User
 from app.services.ai_parser import parse_expense_text
@@ -16,6 +17,14 @@ logger = logging.getLogger(__name__)
 async def require_project(session: AsyncSession, message: Message, user: User) -> bool:
     if user.current_project_id:
         return True
+
+    if user.telegram_id not in settings.admin_user_id_set:
+        await message.answer(
+            "Sizga hali loyiha (obyekt) biriktirilmagan. /mening_id buyrug'i orqali o'z ID'ingizni oling "
+            "va administratorga yuboring - u sizni kerakli loyihaga biriktiradi."
+        )
+        return False
+
     projects = await list_projects(session)
     if not projects:
         await message.answer(

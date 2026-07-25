@@ -26,10 +26,14 @@ Telegram bot orqali kunlik xarajatlar va bank hisobidan o'tadigan pullarni
   o'qiladi va AI yordamida kategoriyalarga bo'linadi; bu alohida, bir martalik
   ko'rib chiqish bosqichi bo'lgani uchun tasdiqlangach darhol bazaga va
   Sheetga tushadi (kun oxirini kutmaydi).
-- **Loyihalar (obyektlar)**: har bir xodim `/loyiha` orqali joriy loyihasini
-  tanlaydi (yoki `/loyiha_yarat <nomi>` bilan yangisini qo'shadi); shu loyiha
-  tanlanmagan bo'lsa, bot yozuvni qabul qilishdan oldin tanlashni so'raydi.
-  Barcha tranzaksiyalar va hisobotlar loyiha bo'yicha ham ajratiladi.
+- **Loyihalar (obyektlar)**: xodimlar o'zlari loyiha tanlamaydi - buni faqat
+  `ADMIN_USER_IDS` da ko'rsatilgan administrator boshqaradi, `/loyiha_biriktir
+  <telegram_id> <loyiha nomi>` buyrug'i bilan (loyiha mavjud bo'lmasa avtomatik
+  yaratiladi). Shundan keyin o'sha xodimning barcha xabarlari avtomatik shu
+  loyihaga tegishli bo'ladi - u boshqa loyihaga o'zi o'ta olmaydi. Hali
+  biriktirilmagan xodim `/mening_id` orqali o'z ID'sini olib, administratorga
+  yuborishi kerak. Barcha tranzaksiyalar va hisobotlar loyiha bo'yicha ham
+  ajratiladi.
 - **Hisobotlar**: `/report` buyrug'i bilan bugungi/haftalik/oylik hisobot
   Excel faylda (tranzaksiyalar ro'yxati + loyiha/kategoriya bo'yicha
   jamlanma) yuboriladi.

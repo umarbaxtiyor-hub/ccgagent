@@ -49,30 +49,28 @@ def format_daily_text_report(rows: list[dict], reporter_name: str) -> str:
         lines.append(f"⚖️ Balans: {_fmt_money(balance)} so'm")
 
         if expense_rows:
-            lines.append("\n<b>Xarajatlar ro'yxati</b> (nomi - hajmi x birim narx = jami narx):")
+            lines.append("\n<b>Xarajatlar ro'yxati:</b>")
             for i, r in enumerate(expense_rows, start=1):
                 name = r.get("nomi") or "-"
                 qty = r.get("miqdor") or ""
                 unit = r.get("birlik") or ""
                 unit_price = r.get("birim_narx") or ""
                 total_str = _fmt_money(r["umumiy_summa"])
+                lines.append(f"{i}. {name} — {total_str} so'm")
                 if qty and unit_price:
-                    line = f"{i}. {name} - {qty:g} {unit} x {_fmt_money(unit_price)} so'm = {total_str} so'm"
-                else:
-                    line = f"{i}. {name} - {total_str} so'm"
+                    qty_part = f"{qty:g} {unit}".strip()
+                    lines.append(f"    {qty_part} x {_fmt_money(unit_price)} so'm")
                 if r.get("izoh"):
-                    line += f" ({r['izoh']})"
-                lines.append(line)
+                    lines.append(f"    ({r['izoh']})")
 
         if income_rows:
             lines.append("\n<b>Kirimlar ro'yxati:</b>")
             for i, r in enumerate(income_rows, start=1):
                 name = r.get("nomi") or "-"
                 total_str = _fmt_money(r["umumiy_summa"])
-                line = f"{i}. {name} - {total_str} so'm"
+                lines.append(f"{i}. {name} — {total_str} so'm")
                 if r.get("izoh"):
-                    line += f" ({r['izoh']})"
-                lines.append(line)
+                    lines.append(f"    ({r['izoh']})")
 
     return "\n".join(lines)
 

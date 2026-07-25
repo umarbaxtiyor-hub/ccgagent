@@ -1,6 +1,7 @@
 import logging
 from collections import defaultdict
 from datetime import date
+from html import escape as h
 
 from aiogram import F, Router
 from aiogram.filters import Command
@@ -17,7 +18,6 @@ from app.handlers.keyboards import (
     day_category_choice_keyboard,
     day_review_keyboard,
     day_row_picker_keyboard,
-    format_day_review,
 )
 from app.models import Transaction
 from app.services.categories import category_names, get_or_create_category
@@ -28,57 +28,88 @@ router = Router()
 logger = logging.getLogger(__name__)
 
 
-def _fmt_money(amount: float) -> str:
-    return f"{amount:,.0f}".replace(",", " ")
+def _fmt_amount(amount: float) -> str:
+    return f"{amount:,.0f}"
+
+
+_SEP = "-" * 37
+_NAME_WIDTH = 14
+
+
+def _table_row(idx: int, name: str, qty: float, amount: float) -> str:
+    display_name = h(name)[:_NAME_WIDTH]
+    qty_str = f"({qty:g}x)" if qty else "-"
+    return f"{idx:02d}  {display_name:<{_NAME_WIDTH}}{qty_str:>8}  {_fmt_amount(amount):>10}"
+
+
+def _build_table(items: list[tuple[str, float, float, str]]) -> list[str]:
+    """items: (name, qty, amount, type) where type is 'income'/'expense'."""
+    table_lines = [_SEP, f"{'№':<4}{'Nomi':<{_NAME_WIDTH}}{'Miqdor':>8}  {'Summa':>10}", _SEP]
+    total_income = 0.0
+    total_expense = 0.0
+    for i, (name, qty, amount, type_) in enumerate(items, start=1):
+        table_lines.append(_table_row(i, name, qty, amount))
+        if type_ == "income":
+            total_income += amount
+        else:
+            total_expense += amount
+    table_lines.append(_SEP)
+    table_lines.append(f"{'Jami kirim:':<27}{_fmt_amount(total_income):>8} UZS")
+    table_lines.append(f"{'JAMI CHIQIM:':<27}{_fmt_amount(total_expense):>8} UZS")
+    table_lines.append(_SEP)
+    table_lines.append(f"{'BALANS:':<27}{_fmt_amount(total_income - total_expense):>8} UZS")
+    return table_lines
+
+
+def _project_header(project_name: str, reporter_name: str) -> str:
+    today_str = date.today().strftime("%d.%m.%Y")
+    return f"📋 LOYIHA: {h(project_name)}\n👤 XODIM: {h(reporter_name)}\n📅 SANA: {today_str}"
 
 
 def format_daily_text_report(rows: list[dict], reporter_name: str) -> str:
-    """Plain-text daily report for the CEO: per project, kirim/chiqim/balans
-    plus the expense list (nomi, hajmi, birim narx, jami narx, izoh)."""
+    """Monospace, receipt-style daily report for the CEO: one block per
+    project with a Nomi/Miqdor/Summa table and kirim/chiqim/balans totals."""
     by_project: dict[str, list[dict]] = defaultdict(list)
     for row in rows:
         by_project[row.get("loyiha") or "-"].append(row)
 
-    lines = [f"📋 <b>Kunlik hisobot</b> - {date.today().isoformat()}", f"👤 Kim: {reporter_name}"]
-
+    sections = []
     for project_name, project_rows in by_project.items():
-        expense_rows = [r for r in project_rows if r["_type"] == "expense"]
-        income_rows = [r for r in project_rows if r["_type"] == "income"]
-        total_expense = sum(r["umumiy_summa"] for r in expense_rows)
-        total_income = sum(r["umumiy_summa"] for r in income_rows)
-        balance = total_income - total_expense
+        items = [
+            (r.get("nomi") or "-", r.get("miqdor") or 0, r["umumiy_summa"], r["_type"])
+            for r in sorted(project_rows, key=lambda r: 0 if r["_type"] == "expense" else 1)
+        ]
+        table = "<pre>" + "\n".join(_build_table(items)) + "</pre>"
+        sections.append(_project_header(project_name, reporter_name) + "\n\n" + table)
 
-        lines.append("")
-        lines.append(f"🏗 <b>Loyiha: {project_name}</b>")
-        lines.append(f"💰 Kirim: {_fmt_money(total_income)} so'm")
-        lines.append(f"💸 Chiqim: {_fmt_money(total_expense)} so'm")
-        lines.append(f"⚖️ Balans: {_fmt_money(balance)} so'm")
+    return "\n\n".join(sections)
 
-        if expense_rows:
-            lines.append("\n<b>Xarajatlar ro'yxati:</b>")
-            for i, r in enumerate(expense_rows, start=1):
-                name = r.get("nomi") or "-"
-                qty = r.get("miqdor") or ""
-                unit = r.get("birlik") or ""
-                unit_price = r.get("birim_narx") or ""
-                total_str = _fmt_money(r["umumiy_summa"])
-                lines.append(f"{i}. {name} — {total_str} so'm")
-                if qty and unit_price:
-                    qty_part = f"{qty:g} {unit}".strip()
-                    lines.append(f"    {qty_part} x {_fmt_money(unit_price)} so'm")
-                if r.get("izoh"):
-                    lines.append(f"    ({r['izoh']})")
 
-        if income_rows:
-            lines.append("\n<b>Kirimlar ro'yxati:</b>")
-            for i, r in enumerate(income_rows, start=1):
-                name = r.get("nomi") or "-"
-                total_str = _fmt_money(r["umumiy_summa"])
-                lines.append(f"{i}. {name} — {total_str} so'm")
-                if r.get("izoh"):
-                    lines.append(f"    ({r['izoh']})")
+def format_day_review(transactions: list[Transaction]) -> str:
+    """Same receipt-style table as the CEO report, for the Daftar view."""
+    if not transactions:
+        return "Tasdiqlanmagan yozuvlar yo'q."
 
-    return "\n".join(lines)
+    by_project: dict[str, list[Transaction]] = defaultdict(list)
+    for t in transactions:
+        by_project[t.project.name if t.project else "-"].append(t)
+    reporter_name = transactions[0].created_by.full_name if transactions[0].created_by else ""
+
+    sections = []
+    for project_name, items in by_project.items():
+        table_items = [
+            (
+                t.description or t.counterparty or (t.category.name if t.category else "-"),
+                float(t.quantity or 0),
+                float(t.amount),
+                t.type.value,
+            )
+            for t in items
+        ]
+        table = "<pre>" + "\n".join(_build_table(table_items)) + "</pre>"
+        sections.append(_project_header(project_name, reporter_name) + "\n\n" + table)
+
+    return "\n\n".join(sections)
 
 
 async def _unconfirmed_for_user(session: AsyncSession, user_id: int) -> list[Transaction]:
@@ -99,7 +130,8 @@ async def _render_day_list(session: AsyncSession, user_id: int) -> tuple[str, In
     transactions = await _unconfirmed_for_user(session, user_id)
     if not transactions:
         return "Tasdiqlanmagan yozuvlar yo'q.", None
-    return format_day_review(transactions), day_review_keyboard()
+    text = format_day_review(transactions) + "\n\nTahrirlash yoki o'chirish uchun tugmani bosing."
+    return text, day_review_keyboard()
 
 
 async def _open_daftar(session: AsyncSession, telegram_id: int, full_name: str, username: str) -> tuple:

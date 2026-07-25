@@ -76,30 +76,6 @@ def daftar_reply_keyboard(count: int) -> ReplyKeyboardMarkup:
     )
 
 
-def format_day_review(transactions: list[Transaction]) -> str:
-    lines = [f"📒 <b>Daftar</b> ({len(transactions)} ta yozuv):\n"]
-
-    for i, t in enumerate(transactions, start=1):
-        emoji = "💰" if t.type.value == "income" else "💸"
-        amount = float(t.amount)
-        amount_str = f"{amount:,.0f}".replace(",", " ")
-        category_name = t.category.name if t.category else "Kategoriyasiz"
-        line = f"{i}. {emoji} {category_name}"
-        if t.description:
-            line += f" — {t.description}"
-        line += f" — {amount_str} so'm"
-        lines.append(line)
-
-    total_expense = sum(float(t.amount) for t in transactions if t.type.value == "expense")
-    total_income = sum(float(t.amount) for t in transactions if t.type.value == "income")
-
-    lines.append("")
-    if total_expense:
-        lines.append(f"Jami chiqim: {total_expense:,.0f} so'm".replace(",", " "))
-    if total_income:
-        lines.append(f"Jami kirim: {total_income:,.0f} so'm".replace(",", " "))
-    lines.append("\nTahrirlash yoki o'chirish uchun tugmani bosing.")
-    return "\n".join(lines)
 
 
 def day_review_keyboard() -> InlineKeyboardMarkup:

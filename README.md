@@ -7,14 +7,25 @@ Telegram bot orqali kunlik xarajatlar va bank hisobidan o'tadigan pullarni
 
 - **Erkin matn**: xodim botga "Sement uchun 500000 so'm to'ladim" kabi xabar
   yozadi, AI (Gemini) summani, turini (kirim/chiqim) va kategoriyasini o'zi
-  aniqlaydi. Saqlashdan oldin tasdiqlash so'raladi.
+  aniqlaydi. Bitta xabarda bir nechta xarajat/kirim sanab o'tilgan bo'lsa,
+  har birini alohida topib oladi.
 - **Chek/kvitansiya rasmi**: rasm yuborilsa, AI undan summa va tafsilotlarni
-  o'qib oladi (vision).
+  o'qib oladi (vision), qo'lda yozilgan bir nechta bandli ro'yxatlarni ham
+  qo'llab-quvvatlaydi.
 - **Ovozli xabar**: Groq (Whisper) orqali matnga o'giriladi, keyin xuddi
   yozma xabar kabi tahlil qilinadi.
+- **Kun davomida yig'ish, kun oxirida tasdiqlash**: matn/ovoz/chekdan
+  aniqlangan har bir yozuv darhol (alohida tasdiqlashsiz) tasdiqlanmagan
+  holatda saqlanadi. Xodim kun davomida xohlagancha xabar yozishi mumkin -
+  hech biri hisobotga yoki Sheetga tushmaydi, toki kun oxirida
+  `/kun_yakuni` buyrug'i orqali ko'rib chiqib, kerak bo'lsa kategoriyasini
+  o'zgartirib yoki xato yozuvni o'chirib, "Barchasini tasdiqlash" tugmasini
+  bosmaguncha. Har bir xodim faqat o'zi kiritgan tasdiqlanmagan yozuvlarni
+  ko'radi.
 - **Bank ko'chirmasi**: `.xlsx`/`.csv` fayl yuborilsa, har bir qator avtomatik
-  o'qiladi va AI yordamida kategoriyalarga bo'linadi, so'ng tasdiqlangandan
-  keyin bazaga saqlanadi.
+  o'qiladi va AI yordamida kategoriyalarga bo'linadi; bu alohida, bir martalik
+  ko'rib chiqish bosqichi bo'lgani uchun tasdiqlangach darhol bazaga va
+  Sheetga tushadi (kun oxirini kutmaydi).
 - **Loyihalar (obyektlar)**: har bir xodim `/loyiha` orqali joriy loyihasini
   tanlaydi (yoki `/loyiha_yarat <nomi>` bilan yangisini qo'shadi); shu loyiha
   tanlanmagan bo'lsa, bot yozuvni qabul qilishdan oldin tanlashni so'raydi.
@@ -24,9 +35,10 @@ Telegram bot orqali kunlik xarajatlar va bank hisobidan o'tadigan pullarni
   jamlanma) yuboriladi.
 - Botdan faqat `ALLOWED_USER_IDS` da ko'rsatilgan Telegram foydalanuvchilari
   foydalana oladi.
-- **Google Sheets sinxronizatsiyasi (ixtiyoriy)**: har bir tasdiqlangan
-  tranzaksiya avtomatik ravishda mavjud Google Sheet jadvaliga qator bo'lib
-  qo'shiladi (pastdagi "Google Sheetsga ulash" bo'limiga qarang).
+- **Google Sheets sinxronizatsiyasi (ixtiyoriy)**: `/kun_yakuni` orqali
+  tasdiqlangan (yoki bank ko'chirmasidan tasdiqlangan) har bir tranzaksiya
+  avtomatik ravishda mavjud Google Sheet jadvaliga qator bo'lib qo'shiladi
+  (pastdagi "Google Sheetsga ulash" bo'limiga qarang).
 
 ## O'rnatish
 
@@ -112,10 +124,10 @@ mavjud Google Sheet faylingiz ichida bir necha qadam:
    - `SHEETS_WEBHOOK_URL` — 4-qadamdagi Web App URL
    - `SHEETS_WEBHOOK_SECRET` — 3-qadamda o'rnatgan SECRET qiymati
 
-Shundan so'ng har bir tasdiqlangan tranzaksiya (matn, ovoz, chek, bank
-ko'chirmasi) avtomatik shu jadvalga qator bo'lib qo'shiladi. Agar bu ikki
-o'zgaruvchi bo'sh qoldirilsa, sinxronizatsiya oddiygina o'chiq turadi — bot
-ishlashiga ta'sir qilmaydi.
+Shundan so'ng `/kun_yakuni` orqali tasdiqlangan (yoki bank ko'chirmasidan
+tasdiqlangan) har bir tranzaksiya avtomatik shu jadvalga qator bo'lib
+qo'shiladi. Agar bu ikki o'zgaruvchi bo'sh qoldirilsa, sinxronizatsiya
+oddiygina o'chiq turadi — bot ishlashiga ta'sir qilmaydi.
 
 ## Loyiha tuzilishi
 
@@ -127,7 +139,8 @@ app/
   models.py             - User, Category, Transaction, Project
   access.py             - foydalanuvchilarni ruxsat bo'yicha filtrlash
   handlers/
-    common.py            - loyiha talab qilish + matn tahlilini navbatga qo'yish (umumiy)
+    common.py            - loyiha talab qilish + matn tahlilini tasdiqlanmagan tranzaksiya sifatida saqlash (umumiy)
+    day_review.py         - /kun_yakuni: kunlik tasdiqlanmagan yozuvlarni ko'rib chiqish/tahrirlash/tasdiqlash
     start.py, text_entry.py, receipt.py, voice.py, bank_import.py,
     projects.py, reports.py - har bir kiritish turi uchun handlerlar
   services/

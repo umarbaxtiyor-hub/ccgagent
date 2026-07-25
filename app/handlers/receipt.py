@@ -7,16 +7,10 @@ from aiogram.types import Message
 from app.access import AllowedUser
 from app.db import async_session
 from app.handlers.common import require_project
-from app.handlers.keyboards import (
-    batch_confirm_keyboard,
-    confirm_keyboard,
-    format_pending,
-    format_pending_batch,
-)
-from app.handlers.pending_store import PendingTransaction, add_pending_tx, add_pending_tx_batch
-from app.models import TransactionSource, TransactionType
+from app.handlers.keyboards import format_queued_ack
+from app.models import Transaction, TransactionSource, TransactionType
 from app.services.ai_parser import parse_receipt_image
-from app.services.categories import category_names
+from app.services.categories import category_names, get_or_create_category
 from app.services.users import get_or_create_user
 
 router = Router()
@@ -61,34 +55,29 @@ async def handle_receipt_photo(message: Message) -> None:
         )
         return
 
-    pendings = [
-        PendingTransaction(
-            user_db_id=user.id,
-            telegram_id=message.from_user.id,
-            type=parsed["type"],
-            amount=float(parsed["amount"]),
-            category=parsed["category"],
-            description=parsed.get("description", ""),
-            counterparty=parsed.get("counterparty", ""),
-            occurred_on=parsed["occurred_on"],
-            source=TransactionSource.receipt_photo.value,
-            project_id=user.current_project_id,
-            project_name=user.current_project.name if user.current_project else None,
-            full_name=user.full_name,
-            quantity=float(parsed.get("quantity") or 0),
-            unit=parsed.get("unit", ""),
-            unit_price=float(parsed.get("unit_price") or 0),
-            payment_type=parsed.get("payment_type", "naqd"),
-            raw_text="[chek rasmi]",
-        )
-        for parsed in valid_items
-    ]
+    async with async_session() as session:
+        for parsed in valid_items:
+            type_enum = TransactionType(parsed["type"])
+            category = await get_or_create_category(session, parsed["category"], type_enum)
+            session.add(
+                Transaction(
+                    type=type_enum,
+                    source=TransactionSource.receipt_photo,
+                    amount=float(parsed["amount"]),
+                    description=parsed.get("description", ""),
+                    counterparty=parsed.get("counterparty", ""),
+                    occurred_on=date.fromisoformat(parsed["occurred_on"]),
+                    category_id=category.id,
+                    created_by_id=user.id,
+                    project_id=user.current_project_id,
+                    confirmed=False,
+                    quantity=float(parsed.get("quantity") or 0),
+                    unit=parsed.get("unit", ""),
+                    unit_price=float(parsed.get("unit_price") or 0),
+                    payment_type=parsed.get("payment_type", "naqd"),
+                    raw_text="[chek rasmi]",
+                )
+            )
+        await session.commit()
 
-    if len(pendings) == 1:
-        pending = pendings[0]
-        pending_id = add_pending_tx(pending)
-        await status_msg.edit_text(format_pending(pending), reply_markup=confirm_keyboard(pending_id))
-        return
-
-    batch_id = add_pending_tx_batch(pendings)
-    await status_msg.edit_text(format_pending_batch(pendings), reply_markup=batch_confirm_keyboard(batch_id))
+    await status_msg.edit_text(format_queued_ack(valid_items))

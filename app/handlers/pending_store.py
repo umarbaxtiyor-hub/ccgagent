@@ -1,33 +1,13 @@
-"""In-memory store for transactions awaiting user confirmation.
+"""In-memory store for bank-import batches awaiting user confirmation.
 
 A single bot process is assumed (no horizontal scaling), so a module-level
-dict is sufficient and avoids needing a separate cache service.
+dict is sufficient and avoids needing a separate cache service. Manual/voice/
+receipt entries no longer go through this store - they're persisted directly
+as unconfirmed Transaction rows and reviewed later via /kun_yakuni.
 """
 
 import uuid
 from dataclasses import dataclass, field
-from typing import Any
-
-
-@dataclass
-class PendingTransaction:
-    user_db_id: int
-    telegram_id: int
-    type: str
-    amount: float
-    category: str
-    description: str
-    counterparty: str
-    occurred_on: str
-    source: str
-    project_id: int | None = None
-    project_name: str | None = None
-    full_name: str = ""
-    quantity: float = 0
-    unit: str = ""
-    unit_price: float = 0
-    payment_type: str = "naqd"
-    raw_text: str = ""
 
 
 @dataclass
@@ -40,23 +20,7 @@ class PendingBankImport:
     rows: list[dict] = field(default_factory=list)
 
 
-_pending_tx: dict[str, PendingTransaction] = {}
 _pending_bank: dict[str, PendingBankImport] = {}
-_pending_tx_batch: dict[str, list[PendingTransaction]] = {}
-
-
-def add_pending_tx(data: PendingTransaction) -> str:
-    key = uuid.uuid4().hex[:12]
-    _pending_tx[key] = data
-    return key
-
-
-def get_pending_tx(key: str) -> PendingTransaction | None:
-    return _pending_tx.get(key)
-
-
-def pop_pending_tx(key: str) -> PendingTransaction | None:
-    return _pending_tx.pop(key, None)
 
 
 def add_pending_bank(data: PendingBankImport) -> str:
@@ -71,13 +35,3 @@ def get_pending_bank(key: str) -> PendingBankImport | None:
 
 def pop_pending_bank(key: str) -> PendingBankImport | None:
     return _pending_bank.pop(key, None)
-
-
-def add_pending_tx_batch(items: list[PendingTransaction]) -> str:
-    key = uuid.uuid4().hex[:12]
-    _pending_tx_batch[key] = items
-    return key
-
-
-def pop_pending_tx_batch(key: str) -> list[PendingTransaction] | None:
-    return _pending_tx_batch.pop(key, None)

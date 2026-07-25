@@ -13,7 +13,11 @@ from app.models import Transaction, TransactionType
 async def build_report(session: AsyncSession, start: date, end: date) -> BytesIO:
     result = await session.execute(
         select(Transaction)
-        .where(Transaction.occurred_on >= start, Transaction.occurred_on <= end)
+        .where(
+            Transaction.occurred_on >= start,
+            Transaction.occurred_on <= end,
+            Transaction.confirmed.is_(True),
+        )
         .options(
             selectinload(Transaction.category),
             selectinload(Transaction.created_by),

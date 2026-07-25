@@ -1,7 +1,7 @@
 import enum
 from datetime import date, datetime
 
-from sqlalchemy import BigInteger, Date, DateTime, Enum, ForeignKey, Numeric, String, Text
+from sqlalchemy import BigInteger, Boolean, Date, DateTime, Enum, ForeignKey, Numeric, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -68,6 +68,13 @@ class Transaction(Base):
     counterparty: Mapped[str] = mapped_column(String(255), default="")
     occurred_on: Mapped[date] = mapped_column(Date)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    confirmed: Mapped[bool] = mapped_column(Boolean, default=True)
+    quantity: Mapped[float] = mapped_column(Numeric(14, 3), default=0)
+    unit: Mapped[str] = mapped_column(String(50), default="")
+    unit_price: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
+    payment_type: Mapped[str] = mapped_column(String(20), default="naqd")
+    raw_text: Mapped[str] = mapped_column(Text, default="")
 
     category_id: Mapped[int] = mapped_column(ForeignKey("categories.id"))
     category: Mapped["Category"] = relationship(back_populates="transactions")

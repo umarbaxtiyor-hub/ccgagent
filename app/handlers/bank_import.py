@@ -145,6 +145,9 @@ async def confirm_bank_import(callback: CallbackQuery) -> None:
                     category_id=category.id,
                     created_by_id=pending.user_db_id,
                     project_id=pending.project_id,
+                    confirmed=True,
+                    raw_text=row.get("raw_description", ""),
+                    payment_type="bank",
                 )
             )
         await session.commit()

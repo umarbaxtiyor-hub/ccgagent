@@ -21,7 +21,10 @@ WELCOME_TEXT = (
     "- /loyiha - qaysi loyiha (obyekt) uchun yozayotganingizni tanlash yoki almashtirish.\n"
     "- /loyiha_yarat &lt;nomi&gt; - yangi loyiha qo'shish.\n"
     "- /report - kunlik/haftalik/oylik hisobotni Excel faylda olish.\n\n"
-    "Har bir yozuvni saqlashdan oldin tasdiqlashingizni so'rayman."
+    "Har bir xabaringizni darhol qabul qilib, kun davomida bir joyga yig'ib boraman - alohida "
+    "tasdiqlashingiz shart emas. Kun oxirida /kun_yakuni buyrug'i bilan kiritilgan hammasini ko'rib "
+    "chiqasiz: kerak bo'lsa kategoriyasini o'zgartirasiz yoki o'chirasiz, so'ng \"Barchasini "
+    "tasdiqlash\" tugmasi bilan yakunlaysiz - shundagina hisobotga tushadi va Google Sheetga yuboriladi."
 )
 
 

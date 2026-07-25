@@ -7,11 +7,12 @@ from aiogram.types import Message
 from app.access import AllowedUser
 from app.db import async_session
 from app.handlers.common import require_project
-from app.handlers.keyboards import daftar_reply_keyboard, format_queued_ack
+from app.handlers.day_review import format_ack_table
+from app.handlers.keyboards import ack_keyboard
+from app.handlers.pending_store import remember_ack
 from app.models import Transaction, TransactionSource, TransactionType
 from app.services.ai_parser import parse_receipt_image
 from app.services.categories import category_names, get_or_create_category
-from app.services.transactions import count_unconfirmed
 from app.services.users import get_or_create_user
 
 router = Router()
@@ -57,30 +58,37 @@ async def handle_receipt_photo(message: Message) -> None:
         return
 
     async with async_session() as session:
+        created = []
         for parsed in valid_items:
             type_enum = TransactionType(parsed["type"])
             category = await get_or_create_category(session, parsed["category"], type_enum)
-            session.add(
-                Transaction(
-                    type=type_enum,
-                    source=TransactionSource.receipt_photo,
-                    amount=float(parsed["amount"]),
-                    description=parsed.get("description", ""),
-                    counterparty=parsed.get("counterparty", ""),
-                    occurred_on=date.fromisoformat(parsed["occurred_on"]),
-                    category_id=category.id,
-                    created_by_id=user.id,
-                    project_id=user.current_project_id,
-                    confirmed=False,
-                    quantity=float(parsed.get("quantity") or 0),
-                    unit=parsed.get("unit", ""),
-                    unit_price=float(parsed.get("unit_price") or 0),
-                    payment_type=parsed.get("payment_type", "naqd"),
-                    raw_text="[chek rasmi]",
-                )
+            tx = Transaction(
+                type=type_enum,
+                source=TransactionSource.receipt_photo,
+                amount=float(parsed["amount"]),
+                description=parsed.get("description", ""),
+                counterparty=parsed.get("counterparty", ""),
+                occurred_on=date.fromisoformat(parsed["occurred_on"]),
+                category_id=category.id,
+                created_by_id=user.id,
+                project_id=user.current_project_id,
+                confirmed=False,
+                quantity=float(parsed.get("quantity") or 0),
+                unit=parsed.get("unit", ""),
+                unit_price=float(parsed.get("unit_price") or 0),
+                payment_type=parsed.get("payment_type", "naqd"),
+                raw_text="[chek rasmi]",
             )
+            session.add(tx)
+            created.append(tx)
+        await session.flush()
+        tx_ids = [tx.id for tx in created]
         await session.commit()
-        count = await count_unconfirmed(session, user.id)
+        project_name = user.current_project.name if user.current_project else "-"
+        reporter_name = user.full_name or user.username or "Xodim"
 
+    remember_ack(message.from_user.id, tx_ids)
     await status_msg.delete()
-    await message.answer(format_queued_ack(valid_items), reply_markup=daftar_reply_keyboard(count))
+    await message.answer(
+        format_ack_table(valid_items, project_name, reporter_name), reply_markup=ack_keyboard()
+    )

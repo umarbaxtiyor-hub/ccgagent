@@ -52,21 +52,16 @@ def report_period_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def format_queued_ack(items: list[dict]) -> str:
-    """Lightweight acknowledgement shown right after a message is parsed and
-    saved as unconfirmed - no buttons, review happens later via /daftar."""
-    multi = len(items) > 1
-    lines = [f"✅ Qabul qilindi ({len(items)} ta yozuv, tasdiqlash kutilmoqda):\n" if multi else "✅ Qabul qilindi (tasdiqlash kutilmoqda):\n"]
-    for i, p in enumerate(items, start=1):
-        type_label = "Kirim" if p["type"] == "income" else "Chiqim"
-        amount_str = f"{float(p['amount']):,.0f}".replace(",", " ")
-        prefix = f"{i}. " if multi else ""
-        line = f"{prefix}{type_label}: {amount_str} so'm - {p['category']}"
-        if p.get("description"):
-            line += f" ({p['description']})"
-        lines.append(line)
-    lines.append("\nKo'rib chiqish/tasdiqlash uchun pastdagi \"📒 Daftar\" tugmasini bosing.")
-    return "\n".join(lines)
+def ack_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="✏️ Tahrirlash", callback_data="ack_edit")]]
+    )
+
+
+def correction_prompt_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="❌ Bekor qilish", callback_data="ack_cancel_edit")]]
+    )
 
 
 def daftar_reply_keyboard(count: int) -> ReplyKeyboardMarkup:
@@ -74,8 +69,6 @@ def daftar_reply_keyboard(count: int) -> ReplyKeyboardMarkup:
         keyboard=[[KeyboardButton(text=f"📒 Daftar ({count})")]],
         resize_keyboard=True,
     )
-
-
 
 
 def day_review_keyboard() -> InlineKeyboardMarkup:

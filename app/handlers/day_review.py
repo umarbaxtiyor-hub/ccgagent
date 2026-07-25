@@ -14,11 +14,14 @@ from app.access import AllowedUser
 from app.config import settings
 from app.db import async_session
 from app.handlers.keyboards import (
+    ack_keyboard,
+    correction_prompt_keyboard,
     daftar_reply_keyboard,
     day_category_choice_keyboard,
     day_review_keyboard,
     day_row_picker_keyboard,
 )
+from app.handlers.pending_store import get_ack_tx_ids, start_correction, stop_correction
 from app.models import Transaction
 from app.services.categories import category_names, get_or_create_category
 from app.services.sheets import append_transaction_row
@@ -32,48 +35,32 @@ def _fmt_amount(amount: float) -> str:
     return f"{amount:,.0f}"
 
 
-_ABBR_STOPWORDS = {"va", "/"}
-
-
-def _abbr_category(name: str) -> str:
-    """1 so'z -> shu so'zning birinchi 3 harfi; 2 (yoki ko'p) so'z -> har bir
-    so'zning bosh harfi ('va', '/' kabi bog'lovchilar hisobga olinmaydi)."""
-    words = [w.strip("/,") for w in name.split() if w.lower() not in _ABBR_STOPWORDS and w.strip("/,")]
-    if len(words) >= 2:
-        return "".join(w[0].upper() for w in words[:2])
-    if words:
-        return words[0][:3].capitalize()
-    return "-"
-
-
-_CAT_WIDTH = 4
-_NAME_WIDTH = 11
+_NAME_WIDTH = 16
 _UNIT_WIDTH = 5
-_SEP = "-" * (3 + _CAT_WIDTH + 1 + _NAME_WIDTH + 5 + 1 + _UNIT_WIDTH + 1 + 10)
+_SEP = "-" * (3 + _NAME_WIDTH + 5 + 1 + _UNIT_WIDTH + 1 + 10)
 
 
-def _table_row(idx: int, category: str, name: str, qty: float, unit: str, amount: float) -> str:
-    display_cat = h(_abbr_category(category))[:_CAT_WIDTH]
-    display_name = h(name)[:_NAME_WIDTH]
+def _table_row(idx: int, category: str, qty: float, unit: str, amount: float) -> str:
+    display_cat = h(category)[:_NAME_WIDTH]
     qty_str = f"{qty:g}" if qty else "-"
     display_unit = h(unit)[:_UNIT_WIDTH]
     return (
-        f"{idx:02d} {display_cat:<{_CAT_WIDTH}} {display_name:<{_NAME_WIDTH}}"
+        f"{idx:02d} {display_cat:<{_NAME_WIDTH}}"
         f"{qty_str:>5} {display_unit:<{_UNIT_WIDTH}}{_fmt_amount(amount):>10}"
     )
 
 
-def _build_table(items: list[tuple[str, str, float, str, float, str]]) -> list[str]:
-    """items: (category, name, qty, unit, amount, type) where type is 'income'/'expense'."""
+def _build_table(items: list[tuple[str, float, str, float, str]]) -> list[str]:
+    """items: (category, qty, unit, amount, type) where type is 'income'/'expense'."""
     header = (
-        f"{'№':<3}{'Kat.':<{_CAT_WIDTH}} {'Nomi':<{_NAME_WIDTH}}"
+        f"{'№':<3}{'Kategoriya':<{_NAME_WIDTH}}"
         f"{'Miqd':>5} {'Birl':<{_UNIT_WIDTH}}{'Summa':>10}"
     )
     table_lines = [_SEP, header, _SEP]
     total_income = 0.0
     total_expense = 0.0
-    for i, (category, name, qty, unit, amount, type_) in enumerate(items, start=1):
-        table_lines.append(_table_row(i, category, name, qty, unit, amount))
+    for i, (category, qty, unit, amount, type_) in enumerate(items, start=1):
+        table_lines.append(_table_row(i, category, qty, unit, amount))
         if type_ == "income":
             total_income += amount
         else:
@@ -90,7 +77,7 @@ def _project_header(project_name: str, reporter_name: str) -> str:
     return f"📋 LOYIHA: {h(project_name)}\n👤 XODIM: {h(reporter_name)}"
 
 
-def _date_block(date_str: str, items: list[tuple[str, str, float, str, float, str]]) -> str:
+def _date_block(date_str: str, items: list[tuple[str, float, str, float, str]]) -> str:
     table = "<pre>" + "\n".join(_build_table(items)) + "</pre>"
     return f"📅 SANA: {date_str}\n" + table
 
@@ -112,14 +99,7 @@ def format_daily_text_report(rows: list[dict], reporter_name: str) -> str:
         for sana in sorted(by_date):
             date_rows = sorted(by_date[sana], key=lambda r: 0 if r["_type"] == "expense" else 1)
             items = [
-                (
-                    r.get("kategoriya") or "-",
-                    r.get("nomi") or "-",
-                    r.get("miqdor") or 0,
-                    r.get("birlik") or "",
-                    r["umumiy_summa"],
-                    r["_type"],
-                )
+                (r.get("kategoriya") or "-", r.get("miqdor") or 0, r.get("birlik") or "", r["umumiy_summa"], r["_type"])
                 for r in date_rows
             ]
             date_str = date.fromisoformat(sana).strftime("%d.%m.%Y")
@@ -151,7 +131,6 @@ def format_day_review(transactions: list[Transaction]) -> str:
             table_items = [
                 (
                     t.category.name if t.category else "-",
-                    t.description or t.counterparty or "-",
                     float(t.quantity or 0),
                     t.unit or "",
                     float(t.amount),
@@ -164,6 +143,19 @@ def format_day_review(transactions: list[Transaction]) -> str:
         sections.append(_project_header(project_name, reporter_name) + "\n\n" + "\n\n".join(date_blocks))
 
     return "\n\n".join(sections)
+
+
+def format_ack_table(items: list[dict], project_name: str, reporter_name: str) -> str:
+    """Same receipt-style table, shown immediately after a message is parsed
+    - so the acknowledgement and the Daftar view always look identical."""
+    table_items = [
+        (p["category"], float(p.get("quantity") or 0), p.get("unit") or "", float(p["amount"]), p["type"])
+        for p in items
+    ]
+    today_str = date.today().strftime("%d.%m.%Y")
+    block = _date_block(today_str, table_items)
+    header = _project_header(project_name, reporter_name)
+    return f"✅ Qabul qilindi (tasdiqlash kutilmoqda)\n\n{header}\n\n{block}"
 
 
 async def _unconfirmed_for_user(session: AsyncSession, user_id: int) -> list[Transaction]:
@@ -408,3 +400,41 @@ async def cancel_all(callback: CallbackQuery) -> None:
     await callback.message.edit_text(f"❌ {count} ta yozuv bekor qilindi.", reply_markup=None)
     await callback.answer("Bekor qilindi")
     await callback.message.answer("📒 Daftar bo'sh.", reply_markup=daftar_reply_keyboard(0))
+
+
+@router.callback_query(F.data == "ack_edit")
+async def ack_edit(callback: CallbackQuery) -> None:
+    tx_ids = get_ack_tx_ids(callback.from_user.id)
+    if not tx_ids:
+        await callback.answer("Bu yozuv muddati o'tgan.", show_alert=True)
+        return
+
+    async with async_session() as session:
+        user = await get_or_create_user(
+            session,
+            telegram_id=callback.from_user.id,
+            full_name=callback.from_user.full_name,
+            username=callback.from_user.username or "",
+        )
+        result = await session.execute(select(Transaction).where(Transaction.id.in_(tx_ids)))
+        still_valid = [
+            t for t in result.scalars().all() if not t.confirmed and t.created_by_id == user.id
+        ]
+
+    if not still_valid:
+        await callback.answer("Bu yozuv muddati o'tgan.", show_alert=True)
+        return
+
+    start_correction(callback.from_user.id)
+    await callback.message.edit_reply_markup(reply_markup=None)
+    await callback.message.answer(
+        "✏️ Xabaringizni to'g'irlab qayta yozing:", reply_markup=correction_prompt_keyboard()
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "ack_cancel_edit")
+async def ack_cancel_edit(callback: CallbackQuery) -> None:
+    stop_correction(callback.from_user.id)
+    await callback.message.edit_text("❌ Bekor qilindi.", reply_markup=None)
+    await callback.answer("Bekor qilindi")

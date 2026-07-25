@@ -41,13 +41,13 @@ async def require_project(session: AsyncSession, message: Message, user: User) -
 
 async def parse_and_save_transactions(
     session: AsyncSession, user: User, text: str, source: str
-) -> list[dict] | str:
+) -> tuple[list[dict], list[int]] | str:
     """Parses text and immediately persists each valid item as an unconfirmed
     Transaction (no per-message tap-confirm) - the user reviews and confirms
     everything at once later via /daftar.
 
-    Returns the parsed dicts (for building an acknowledgement message) on
-    success, or an error message string on failure/low confidence.
+    Returns (parsed dicts, created transaction ids) on success, or an error
+    message string on failure/low confidence.
     """
     expense_cats = await category_names(session, TransactionType.expense)
     income_cats = await category_names(session, TransactionType.income)
@@ -65,27 +65,30 @@ async def parse_and_save_transactions(
             "qayta yozing: \"Sement uchun 500000 so'm to'ladim\"."
         )
 
+    created = []
     for parsed in valid_items:
         type_enum = TransactionType(parsed["type"])
         category = await get_or_create_category(session, parsed["category"], type_enum)
-        session.add(
-            Transaction(
-                type=type_enum,
-                source=TransactionSource(source),
-                amount=float(parsed["amount"]),
-                description=parsed.get("description", ""),
-                counterparty=parsed.get("counterparty", ""),
-                occurred_on=date.fromisoformat(parsed["occurred_on"]),
-                category_id=category.id,
-                created_by_id=user.id,
-                project_id=user.current_project_id,
-                confirmed=False,
-                quantity=float(parsed.get("quantity") or 0),
-                unit=parsed.get("unit", ""),
-                unit_price=float(parsed.get("unit_price") or 0),
-                payment_type=parsed.get("payment_type", "naqd"),
-                raw_text=text,
-            )
+        tx = Transaction(
+            type=type_enum,
+            source=TransactionSource(source),
+            amount=float(parsed["amount"]),
+            description=parsed.get("description", ""),
+            counterparty=parsed.get("counterparty", ""),
+            occurred_on=date.fromisoformat(parsed["occurred_on"]),
+            category_id=category.id,
+            created_by_id=user.id,
+            project_id=user.current_project_id,
+            confirmed=False,
+            quantity=float(parsed.get("quantity") or 0),
+            unit=parsed.get("unit", ""),
+            unit_price=float(parsed.get("unit_price") or 0),
+            payment_type=parsed.get("payment_type", "naqd"),
+            raw_text=text,
         )
+        session.add(tx)
+        created.append(tx)
+    await session.flush()
+    tx_ids = [tx.id for tx in created]
     await session.commit()
-    return valid_items
+    return valid_items, tx_ids

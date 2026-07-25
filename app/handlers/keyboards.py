@@ -73,8 +73,14 @@ def daftar_reply_keyboard(count: int) -> ReplyKeyboardMarkup:
 def day_review_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🗑 O'chirish", callback_data="day_delete_prompt")],
-            [InlineKeyboardButton(text="✅ Hammasini tasdiqlash", callback_data="day_confirm_all")],
+            [
+                InlineKeyboardButton(text="✏️ Tahrirlash", callback_data="day_edit_hint"),
+                InlineKeyboardButton(text="🗑 O'chirish", callback_data="day_delete_prompt"),
+            ],
+            [
+                InlineKeyboardButton(text="✅ Hammasini tasdiqlash", callback_data="day_confirm_all"),
+                InlineKeyboardButton(text="❌ Bekor qilish", callback_data="day_cancel_all"),
+            ],
         ]
     )
 

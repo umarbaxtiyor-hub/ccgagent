@@ -177,7 +177,7 @@ async def _render_day_list(session: AsyncSession, user_id: int) -> tuple[str, In
     transactions = await _unconfirmed_for_user(session, user_id)
     if not transactions:
         return "Tasdiqlanmagan yozuvlar yo'q.", None
-    text = format_day_review(transactions) + "\n\nO'chirish yoki barchasini tasdiqlash uchun tugmani bosing."
+    text = format_day_review(transactions) + "\n\nTahrirlash yoki o'chirish uchun tugmani bosing."
     return text, day_review_keyboard()
 
 
@@ -214,13 +214,20 @@ async def ack_goto_daftar(callback: CallbackQuery) -> None:
     await callback.answer()
 
 
+_EDIT_HINT = (
+    "Xabaringizni to'g'irlash uchun: o'zingiz yozgan xabar ustiga bosib turing va "
+    "\"Tahrirlash\"/\"Edit\"ni tanlang, kerakli joyini o'zgartirib qayta yuboring."
+)
+
+
 @router.callback_query(F.data == "ack_edit_hint")
 async def ack_edit_hint(callback: CallbackQuery) -> None:
-    await callback.answer(
-        "Xabaringizni to'g'irlash uchun: o'zingiz yozgan xabar ustiga bosib turing va "
-        "\"Tahrirlash\"/\"Edit\"ni tanlang, kerakli joyini o'zgartirib qayta yuboring.",
-        show_alert=True,
-    )
+    await callback.answer(_EDIT_HINT, show_alert=True)
+
+
+@router.callback_query(F.data == "day_edit_hint")
+async def day_edit_hint(callback: CallbackQuery) -> None:
+    await callback.answer(_EDIT_HINT, show_alert=True)
 
 
 @router.callback_query(F.data == "day_list")
@@ -333,3 +340,23 @@ async def confirm_all(callback: CallbackQuery) -> None:
             await callback.bot.send_message(chat_id=recipient_id, text=report_text)
         except Exception:
             logger.exception("Failed to send daily report to recipient")
+
+
+@router.callback_query(F.data == "day_cancel_all")
+async def cancel_all(callback: CallbackQuery) -> None:
+    async with async_session() as session:
+        user = await get_or_create_user(
+            session,
+            telegram_id=callback.from_user.id,
+            full_name=callback.from_user.full_name,
+            username=callback.from_user.username or "",
+        )
+        transactions = await _unconfirmed_for_user(session, user.id)
+        count = len(transactions)
+        for t in transactions:
+            await session.delete(t)
+        await session.commit()
+
+    await callback.message.edit_text(f"❌ {count} ta yozuv bekor qilindi.", reply_markup=None)
+    await callback.answer("Bekor qilindi")
+    await callback.message.answer("📒 Daftar bo'sh.", reply_markup=daftar_reply_keyboard(0))

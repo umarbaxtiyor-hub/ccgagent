@@ -44,7 +44,7 @@ async def parse_and_save_transactions(
 ) -> list[dict] | str:
     """Parses text and immediately persists each valid item as an unconfirmed
     Transaction (no per-message tap-confirm) - the user reviews and confirms
-    everything at once later via /kun_yakuni.
+    everything at once later via /daftar.
 
     Returns the parsed dicts (for building an acknowledgement message) on
     success, or an error message string on failure/low confidence.

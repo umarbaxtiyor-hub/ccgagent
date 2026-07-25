@@ -14,12 +14,13 @@ Telegram bot orqali kunlik xarajatlar va bank hisobidan o'tadigan pullarni
   qo'llab-quvvatlaydi.
 - **Ovozli xabar**: Groq (Whisper) orqali matnga o'giriladi, keyin xuddi
   yozma xabar kabi tahlil qilinadi.
-- **Kun davomida yig'ish, kun oxirida tasdiqlash**: matn/ovoz/chekdan
+- **Kun davomida yig'ish, Daftar orqali tasdiqlash**: matn/ovoz/chekdan
   aniqlangan har bir yozuv darhol (alohida tasdiqlashsiz) tasdiqlanmagan
-  holatda saqlanadi. Xodim kun davomida xohlagancha xabar yozishi mumkin -
-  hech biri hisobotga yoki Sheetga tushmaydi, toki kun oxirida
-  `/kun_yakuni` buyrug'i orqali ko'rib chiqib, kerak bo'lsa kategoriyasini
-  o'zgartirib yoki xato yozuvni o'chirib, "Barchasini tasdiqlash" tugmasini
+  holatda saqlanadi va pastdagi doimiy **"📒 Daftar (N)"** tugmasidagi son
+  yangilanib boradi. Hech biri hisobotga yoki Sheetga tushmaydi, toki xodim
+  shu tugmani (yoki `/daftar` buyrug'ini) bosib ro'yxatni ochib, bitta
+  "✏️ Tahrirlash" va bitta "🗑 O'chirish" tugmasi orqali (raqamini tanlab)
+  kerakli yozuvlarni to'g'irlab/olib tashlab, "✅ Hammasini tasdiqlash"ni
   bosmaguncha. Har bir xodim faqat o'zi kiritgan tasdiqlanmagan yozuvlarni
   ko'radi.
 - **Bank ko'chirmasi**: `.xlsx`/`.csv` fayl yuborilsa, har bir qator avtomatik
@@ -43,12 +44,12 @@ Telegram bot orqali kunlik xarajatlar va bank hisobidan o'tadigan pullarni
   bo'yicha jamlanma) yuboriladi.
 - Botdan faqat `ALLOWED_USER_IDS` da ko'rsatilgan Telegram foydalanuvchilari
   foydalana oladi.
-- **Google Sheets sinxronizatsiyasi (ixtiyoriy)**: `/kun_yakuni` orqali
+- **Google Sheets sinxronizatsiyasi (ixtiyoriy)**: `/daftar` orqali
   tasdiqlangan (yoki bank ko'chirmasidan tasdiqlangan) har bir tranzaksiya
   avtomatik ravishda mavjud Google Sheet jadvaliga qator bo'lib qo'shiladi
   (pastdagi "Google Sheetsga ulash" bo'limiga qarang).
 - **Avtomatik kunlik hisobot (ixtiyoriy)**: `REPORT_RECIPIENT_ID` sozlansa
-  (masalan CEOning Telegram ID'si), har safar kimdir `/kun_yakuni`ni
+  (masalan CEOning Telegram ID'si), har safar kimdir `/daftar`ni
   "Barchasini tasdiqlash" bilan yakunlaganda, o'sha kunlik yozuvlar bo'yicha
   oddiy matnli hisobot (fayl emas) avtomatik shu Telegram ID'ga yuboriladi:
   qaysi loyiha, kim tomonidan, kirim/chiqim/balans, va xarajatlar ro'yxati
@@ -139,7 +140,7 @@ mavjud Google Sheet faylingiz ichida bir necha qadam:
    - `SHEETS_WEBHOOK_URL` — 4-qadamdagi Web App URL
    - `SHEETS_WEBHOOK_SECRET` — 3-qadamda o'rnatgan SECRET qiymati
 
-Shundan so'ng `/kun_yakuni` orqali tasdiqlangan (yoki bank ko'chirmasidan
+Shundan so'ng `/daftar` orqali tasdiqlangan (yoki bank ko'chirmasidan
 tasdiqlangan) har bir tranzaksiya avtomatik shu jadvalga qator bo'lib
 qo'shiladi. Agar bu ikki o'zgaruvchi bo'sh qoldirilsa, sinxronizatsiya
 oddiygina o'chiq turadi — bot ishlashiga ta'sir qilmaydi.
@@ -155,7 +156,7 @@ app/
   access.py             - foydalanuvchilarni ruxsat bo'yicha filtrlash
   handlers/
     common.py            - loyiha talab qilish + matn tahlilini tasdiqlanmagan tranzaksiya sifatida saqlash (umumiy)
-    day_review.py         - /kun_yakuni: kunlik tasdiqlanmagan yozuvlarni ko'rib chiqish/tahrirlash/tasdiqlash
+    day_review.py         - /daftar: kunlik tasdiqlanmagan yozuvlarni ko'rib chiqish/tahrirlash/tasdiqlash
     start.py, text_entry.py, receipt.py, voice.py, bank_import.py,
     projects.py, reports.py - har bir kiritish turi uchun handlerlar
   services/

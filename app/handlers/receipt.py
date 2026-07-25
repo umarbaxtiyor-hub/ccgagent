@@ -7,10 +7,11 @@ from aiogram.types import Message
 from app.access import AllowedUser
 from app.db import async_session
 from app.handlers.common import require_project
-from app.handlers.keyboards import format_queued_ack
+from app.handlers.keyboards import daftar_reply_keyboard, format_queued_ack
 from app.models import Transaction, TransactionSource, TransactionType
 from app.services.ai_parser import parse_receipt_image
 from app.services.categories import category_names, get_or_create_category
+from app.services.transactions import count_unconfirmed
 from app.services.users import get_or_create_user
 
 router = Router()
@@ -79,5 +80,7 @@ async def handle_receipt_photo(message: Message) -> None:
                 )
             )
         await session.commit()
+        count = await count_unconfirmed(session, user.id)
 
-    await status_msg.edit_text(format_queued_ack(valid_items))
+    await status_msg.delete()
+    await message.answer(format_queued_ack(valid_items), reply_markup=daftar_reply_keyboard(count))

@@ -7,9 +7,10 @@ from aiogram.types import Message
 from app.access import AllowedUser
 from app.config import settings
 from app.db import async_session
-from app.handlers.keyboards import new_user_assign_keyboard
+from app.handlers.keyboards import daftar_reply_keyboard, new_user_assign_keyboard
 from app.services.categories import seed_categories
 from app.services.projects import list_projects
+from app.services.transactions import count_unconfirmed
 from app.services.users import get_or_create_user
 
 router = Router()
@@ -29,9 +30,10 @@ HELP_TEXT = (
     "- /report - kunlik/haftalik/oylik/boshidan hisobotni Excel faylda olish.\n"
     "- /mening_id - o'zingizning Telegram ID'ingizni bilib olish.\n\n"
     "Har bir xabaringizni darhol qabul qilib, kun davomida bir joyga yig'ib boraman - alohida "
-    "tasdiqlashingiz shart emas. Kun oxirida /kun_yakuni buyrug'i bilan kiritilgan hammasini ko'rib "
-    "chiqasiz: kerak bo'lsa kategoriyasini o'zgartirasiz yoki o'chirasiz, so'ng \"Barchasini "
-    "tasdiqlash\" tugmasi bilan yakunlaysiz - shundagina hisobotga tushadi va Google Sheetga yuboriladi.\n\n"
+    "tasdiqlashingiz shart emas. Pastdagi \"📒 Daftar\" tugmasini (yoki /daftar buyrug'ini) bosib "
+    "kiritilgan hammasini istalgan vaqtda ko'rib chiqasiz: kerak bo'lsa kategoriyasini o'zgartirasiz "
+    "yoki o'chirasiz, so'ng \"Hammasini tasdiqlash\" tugmasi bilan yakunlaysiz - shundagina hisobotga "
+    "tushadi va Google Sheetga yuboriladi.\n\n"
     "Loyihangizni administrator biriktiradi. Agar hali biriktirilmagan bo'lsa, /mening_id orqali "
     "ID'ingizni olib, administratorga yuboring."
 )
@@ -59,9 +61,12 @@ async def cmd_start(message: Message) -> None:
         if needs_assignment:
             projects = await list_projects(session)
 
+        count = await count_unconfirmed(session, user.id)
+
     await message.answer(
         f"Salom, {message.from_user.full_name}! Men {BOT_PERSONA_NAME}man, sizning hisobot "
-        "asistentingizman."
+        "asistentingizman.",
+        reply_markup=daftar_reply_keyboard(count),
     )
 
     if not needs_assignment:

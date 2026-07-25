@@ -3,7 +3,7 @@
 A single bot process is assumed (no horizontal scaling), so a module-level
 dict is sufficient and avoids needing a separate cache service. Manual/voice/
 receipt entries no longer go through this store - they're persisted directly
-as unconfirmed Transaction rows and reviewed later via /kun_yakuni.
+as unconfirmed Transaction rows and reviewed later via /daftar.
 """
 
 import uuid

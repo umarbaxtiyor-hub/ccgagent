@@ -1,4 +1,4 @@
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 
 from app.models import Project, Transaction
 
@@ -54,7 +54,7 @@ def report_period_keyboard() -> InlineKeyboardMarkup:
 
 def format_queued_ack(items: list[dict]) -> str:
     """Lightweight acknowledgement shown right after a message is parsed and
-    saved as unconfirmed - no buttons, review happens later via /kun_yakuni."""
+    saved as unconfirmed - no buttons, review happens later via /daftar."""
     multi = len(items) > 1
     lines = [f"✅ Qabul qilindi ({len(items)} ta yozuv, tasdiqlash kutilmoqda):\n" if multi else "✅ Qabul qilindi (tasdiqlash kutilmoqda):\n"]
     for i, p in enumerate(items, start=1):
@@ -65,30 +65,21 @@ def format_queued_ack(items: list[dict]) -> str:
         if p.get("description"):
             line += f" ({p['description']})"
         lines.append(line)
-    lines.append("\nKun oxirida /kun_yakuni bilan ko'rib chiqib, tasdiqlang.")
+    lines.append("\nKo'rib chiqish/tasdiqlash uchun pastdagi \"📒 Daftar\" tugmasini bosing.")
     return "\n".join(lines)
 
 
-DAY_PAGE_SIZE = 8
+def daftar_reply_keyboard(count: int) -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=f"📒 Daftar ({count})")]],
+        resize_keyboard=True,
+    )
 
 
-def _total_pages(count: int, page_size: int = DAY_PAGE_SIZE) -> int:
-    return max(1, (count + page_size - 1) // page_size)
+def format_day_review(transactions: list[Transaction]) -> str:
+    lines = [f"📒 <b>Daftar</b> ({len(transactions)} ta yozuv):\n"]
 
-
-def format_day_review(transactions: list[Transaction], page: int = 0, page_size: int = DAY_PAGE_SIZE) -> str:
-    total = len(transactions)
-    total_pages = _total_pages(total, page_size)
-    start = page * page_size
-    page_items = transactions[start : start + page_size]
-
-    header = f"<b>{total} ta tasdiqlanmagan yozuv</b>"
-    if total_pages > 1:
-        header += f" (sahifa {page + 1}/{total_pages})"
-    lines = [header + ":\n"]
-
-    for offset, t in enumerate(page_items):
-        i = start + offset + 1
+    for i, t in enumerate(transactions, start=1):
         type_label = "Kirim" if t.type.value == "income" else "Chiqim"
         amount = float(t.amount)
         amount_str = f"{amount:,.0f}".replace(",", " ")
@@ -105,49 +96,49 @@ def format_day_review(transactions: list[Transaction], page: int = 0, page_size:
         lines.append(f"Jami chiqim: {total_expense:,.0f} so'm".replace(",", " "))
     if total_income:
         lines.append(f"Jami kirim: {total_income:,.0f} so'm".replace(",", " "))
-    lines.append("\nHar bir yozuvni tahrirlash (✏️) yoki o'chirish (🗑) mumkin, aks holda barchasini tasdiqlang.")
+    lines.append("\nTahrirlash yoki o'chirish uchun tugmani bosing.")
     return "\n".join(lines)
 
 
-def day_review_keyboard(
-    transactions: list[Transaction], page: int = 0, page_size: int = DAY_PAGE_SIZE
-) -> InlineKeyboardMarkup:
-    total_pages = _total_pages(len(transactions), page_size)
-    start = page * page_size
-    page_items = transactions[start : start + page_size]
+def day_review_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✏️ Tahrirlash", callback_data="day_edit_prompt"),
+                InlineKeyboardButton(text="🗑 O'chirish", callback_data="day_delete_prompt"),
+            ],
+            [InlineKeyboardButton(text="✅ Hammasini tasdiqlash", callback_data="day_confirm_all")],
+            [InlineKeyboardButton(text="🗑 Tozalash", callback_data="day_cancel_all")],
+        ]
+    )
 
+
+def day_row_picker_keyboard(transactions: list[Transaction], action: str) -> InlineKeyboardMarkup:
+    """Compact numbered grid so the user can pick which row to edit/delete
+    without one button-pair per row cluttering the screen."""
     rows = []
-    for offset, t in enumerate(page_items):
-        i = start + offset + 1
+    chunk_size = 5
+    for i in range(0, len(transactions), chunk_size):
+        chunk = transactions[i : i + chunk_size]
         rows.append(
             [
-                InlineKeyboardButton(text=f"✏️ {i}", callback_data=f"day_cat:{t.id}:{page}"),
-                InlineKeyboardButton(text=f"🗑 {i}", callback_data=f"day_del:{t.id}:{page}"),
+                InlineKeyboardButton(text=str(i + offset + 1), callback_data=f"day_pick_{action}:{t.id}")
+                for offset, t in enumerate(chunk)
             ]
         )
-
-    if total_pages > 1:
-        nav_row = []
-        if page > 0:
-            nav_row.append(InlineKeyboardButton(text="◀️ Oldingi", callback_data=f"day_page:{page - 1}"))
-        if page < total_pages - 1:
-            nav_row.append(InlineKeyboardButton(text="Keyingi ▶️", callback_data=f"day_page:{page + 1}"))
-        rows.append(nav_row)
-
-    rows.append([InlineKeyboardButton(text="✅ Barchasini tasdiqlash", callback_data="day_confirm_all")])
-    rows.append([InlineKeyboardButton(text="❌ Hammasini bekor qilish", callback_data="day_cancel_all")])
+    rows.append([InlineKeyboardButton(text="Orqaga", callback_data="day_list")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def day_category_choice_keyboard(tx_id: int, categories: list[str], page: int = 0) -> InlineKeyboardMarkup:
+def day_category_choice_keyboard(tx_id: int, categories: list[str]) -> InlineKeyboardMarkup:
     rows = []
     for i in range(0, len(categories), 2):
         chunk = categories[i : i + 2]
         rows.append(
             [
-                InlineKeyboardButton(text=name, callback_data=f"day_setcat:{tx_id}:{idx}:{page}")
+                InlineKeyboardButton(text=name, callback_data=f"day_setcat:{tx_id}:{idx}")
                 for idx, name in zip(range(i, i + len(chunk)), chunk)
             ]
         )
-    rows.append([InlineKeyboardButton(text="Orqaga", callback_data=f"day_list:{page}")])
+    rows.append([InlineKeyboardButton(text="Orqaga", callback_data="day_list")])
     return InlineKeyboardMarkup(inline_keyboard=rows)

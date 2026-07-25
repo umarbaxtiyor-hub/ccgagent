@@ -6,9 +6,10 @@ from aiogram.types import Message
 from app.access import AllowedUser
 from app.db import async_session
 from app.handlers.common import parse_and_save_transactions, require_project
-from app.handlers.keyboards import format_queued_ack
+from app.handlers.keyboards import daftar_reply_keyboard, format_queued_ack
 from app.models import TransactionSource
 from app.services.stt import transcribe_voice
+from app.services.transactions import count_unconfirmed
 from app.services.users import get_or_create_user
 
 router = Router()
@@ -59,9 +60,12 @@ async def handle_voice(message: Message) -> None:
             session, user, transcript, TransactionSource.voice_message.value
         )
 
-    prefix = f'🎤 <i>"{transcript}"</i>\n\n'
-    if isinstance(result, str):
-        await status_msg.edit_text(prefix + result)
-        return
+        prefix = f'🎤 <i>"{transcript}"</i>\n\n'
+        if isinstance(result, str):
+            await status_msg.edit_text(prefix + result)
+            return
 
-    await status_msg.edit_text(prefix + format_queued_ack(result))
+        count = await count_unconfirmed(session, user.id)
+
+    await status_msg.delete()
+    await message.answer(prefix + format_queued_ack(result), reply_markup=daftar_reply_keyboard(count))

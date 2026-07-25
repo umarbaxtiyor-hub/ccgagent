@@ -29,14 +29,18 @@ Telegram bot orqali kunlik xarajatlar va bank hisobidan o'tadigan pullarni
 - **Loyihalar (obyektlar)**: xodimlar o'zlari loyiha tanlamaydi - buni faqat
   `ADMIN_USER_IDS` da ko'rsatilgan administrator boshqaradi, `/loyiha_biriktir
   <telegram_id> <loyiha nomi>` buyrug'i bilan (loyiha mavjud bo'lmasa avtomatik
-  yaratiladi). Shundan keyin o'sha xodimning barcha xabarlari avtomatik shu
-  loyihaga tegishli bo'ladi - u boshqa loyihaga o'zi o'ta olmaydi. Hali
-  biriktirilmagan xodim `/mening_id` orqali o'z ID'sini olib, administratorga
-  yuborishi kerak. Barcha tranzaksiyalar va hisobotlar loyiha bo'yicha ham
+  yaratiladi). Yangi xodim botga `/start` bosganda, agar u hali biriktirilmagan
+  bo'lsa, barcha adminlarga xodim ismi/ID'si va mavjud loyihalar tugmalari
+  bilan xabar boradi - bitta tugma bosish bilan biriktirish mumkin (yangi
+  loyiha kerak bo'lsa, tayyor `/loyiha_biriktir` buyrug'i xabarda ko'rsatiladi,
+  shuni matn qilib yuborish kifoya). Shundan keyin o'sha xodimning barcha
+  xabarlari avtomatik shu loyihaga tegishli bo'ladi - u boshqa loyihaga o'zi
+  o'ta olmaydi. Barcha tranzaksiyalar va hisobotlar loyiha bo'yicha ham
   ajratiladi.
-- **Hisobotlar**: `/report` buyrug'i bilan bugungi/haftalik/oylik hisobot
-  Excel faylda (tranzaksiyalar ro'yxati + loyiha/kategoriya bo'yicha
-  jamlanma) yuboriladi.
+- **Hisobotlar**: `/report` buyrug'i bilan bugungi/haftalik/oylik yoki
+  boshidan hozirgacha (kumulyativ, kun-kunlar qatorlari uzluksiz davom
+  etadigan) hisobot Excel faylda (tranzaksiyalar ro'yxati + loyiha/kategoriya
+  bo'yicha jamlanma) yuboriladi.
 - Botdan faqat `ALLOWED_USER_IDS` da ko'rsatilgan Telegram foydalanuvchilari
   foydalana oladi.
 - **Google Sheets sinxronizatsiyasi (ixtiyoriy)**: `/kun_yakuni` orqali

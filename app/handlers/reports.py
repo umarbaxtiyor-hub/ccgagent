@@ -11,10 +11,10 @@ from app.services.excel_export import build_report
 
 router = Router()
 
-_PERIOD_LABELS = {"today": "Bugungi", "week": "Shu haftalik", "month": "Shu oylik"}
+_PERIOD_LABELS = {"today": "Bugungi", "week": "Shu haftalik", "month": "Shu oylik", "all": "Boshidan hozirgacha"}
 
 
-def _period_range(period: str) -> tuple[date, date]:
+def _period_range(period: str) -> tuple[date | None, date]:
     today = date.today()
     if period == "today":
         return today, today
@@ -22,6 +22,8 @@ def _period_range(period: str) -> tuple[date, date]:
         return today - timedelta(days=today.weekday()), today
     if period == "month":
         return today.replace(day=1), today
+    if period == "all":
+        return None, today
     raise ValueError(period)
 
 
@@ -38,9 +40,10 @@ async def send_report(callback: CallbackQuery) -> None:
     async with async_session() as session:
         buffer = await build_report(session, start, end)
 
-    filename = f"hisobot_{start.isoformat()}_{end.isoformat()}.xlsx"
+    start_label = start.isoformat() if start else "boshidan"
+    filename = f"hisobot_{start_label}_{end.isoformat()}.xlsx"
     await callback.message.answer_document(
         BufferedInputFile(buffer.read(), filename=filename),
-        caption=f"{_PERIOD_LABELS[period]} hisobot ({start.isoformat()} - {end.isoformat()})",
+        caption=f"{_PERIOD_LABELS[period]} hisobot ({start_label} - {end.isoformat()})",
     )
     await callback.answer()

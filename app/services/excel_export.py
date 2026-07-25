@@ -10,14 +10,17 @@ from sqlalchemy.orm import selectinload
 from app.models import Transaction, TransactionType
 
 
-async def build_report(session: AsyncSession, start: date, end: date) -> BytesIO:
+async def build_report(session: AsyncSession, start: date | None, end: date) -> BytesIO:
+    """start=None produces a cumulative report of every confirmed transaction
+    ever recorded, up to and including `end` - so each day's rows continue
+    where the previous day's left off instead of resetting."""
+    conditions = [Transaction.occurred_on <= end, Transaction.confirmed.is_(True)]
+    if start is not None:
+        conditions.append(Transaction.occurred_on >= start)
+
     result = await session.execute(
         select(Transaction)
-        .where(
-            Transaction.occurred_on >= start,
-            Transaction.occurred_on <= end,
-            Transaction.confirmed.is_(True),
-        )
+        .where(*conditions)
         .options(
             selectinload(Transaction.category),
             selectinload(Transaction.created_by),

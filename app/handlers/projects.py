@@ -101,6 +101,40 @@ async def cmd_loyiha_biriktir(message: Message) -> None:
         logger.exception("Failed to notify employee %s about project assignment", employee_id)
 
 
+@router.callback_query(F.data.startswith("newuser_assign:"))
+async def assign_new_user(callback: CallbackQuery) -> None:
+    if callback.from_user.id not in settings.admin_user_id_set:
+        await callback.answer("Bu amal faqat administrator uchun.", show_alert=True)
+        return
+
+    _, employee_id_str, project_id_str = callback.data.split(":", 2)
+    employee_id = int(employee_id_str)
+    project_id = int(project_id_str)
+
+    async with async_session() as session:
+        employee = await get_or_create_user(session, telegram_id=employee_id, full_name="", username="")
+        await set_user_current_project(session, employee.id, project_id)
+        projects = await list_projects(session)
+        project = next((p for p in projects if p.id == project_id), None)
+
+    project_name = project.name if project else project_id
+    await callback.message.edit_text(
+        f"✅ Xodim (ID: {employee_id}) \"{project_name}\" loyihasiga biriktirildi.", reply_markup=None
+    )
+    await callback.answer("Biriktirildi")
+
+    try:
+        await callback.bot.send_message(
+            chat_id=employee_id,
+            text=(
+                f"📌 Sizga <b>{project_name}</b> loyihasi biriktirildi. Endi yuboradigan barcha "
+                "xabarlaringiz shu loyihaga tegishli bo'ladi."
+            ),
+        )
+    except Exception:
+        logger.exception("Failed to notify employee %s about project assignment", employee_id)
+
+
 @router.callback_query(F.data.startswith("proj_select:"))
 async def select_project(callback: CallbackQuery) -> None:
     if callback.from_user.id not in settings.admin_user_id_set:

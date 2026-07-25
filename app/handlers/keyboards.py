@@ -24,6 +24,21 @@ def project_list_keyboard(projects: list[Project]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def new_user_assign_keyboard(employee_telegram_id: int, projects: list[Project]) -> InlineKeyboardMarkup:
+    rows = []
+    for i in range(0, len(projects), 2):
+        chunk = projects[i : i + 2]
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=p.name, callback_data=f"newuser_assign:{employee_telegram_id}:{p.id}"
+                )
+                for p in chunk
+            ]
+        )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def report_period_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -31,7 +46,8 @@ def report_period_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="Bugun", callback_data="report:today"),
                 InlineKeyboardButton(text="Shu hafta", callback_data="report:week"),
                 InlineKeyboardButton(text="Shu oy", callback_data="report:month"),
-            ]
+            ],
+            [InlineKeyboardButton(text="Hammasi (boshidan)", callback_data="report:all")],
         ]
     )
 

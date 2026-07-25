@@ -112,6 +112,10 @@ bering (quyida 2-band).
      `gemini-flash-latest`/`gemini-2.5-flash`ga qaraganda ancha yuqori, shuning
      uchun tez-tez 429 "quota exceeded" xatosiga duch kelmaslik uchun shu
      model tanlangan)
+   - `OPENAI_API_KEY` (ixtiyoriy — Gemini xato bersa (masalan kvota tugasa),
+     bot avtomatik shu bilan tahlil qilishga o'tadi, shuning uchun ikkala
+     xizmat ham to'xtab qolmaguncha bot ishlashda davom etadi)
+   - `OPENAI_MODEL` (ixtiyoriy, standart: `gpt-4o-mini`)
    - `GROQ_API_KEY` (ovozli xabarlar uchun)
    - `ALLOWED_USER_IDS`
    - `DATABASE_URL` (yuqoridagi 2-band)

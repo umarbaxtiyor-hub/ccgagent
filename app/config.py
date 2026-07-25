@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     bot_token: str
     gemini_api_key: str
     gemini_model: str = "gemini-2.0-flash-lite"
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"
     groq_api_key: str = ""
     database_url: str
     allowed_user_ids: str = ""

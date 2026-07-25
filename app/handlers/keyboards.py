@@ -60,7 +60,7 @@ def ack_choice_keyboard() -> InlineKeyboardMarkup:
 
 def daftar_reply_keyboard(count: int) -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=f"📒 Daftar ({count})")]],
+        keyboard=[[KeyboardButton(text=f"📒 Daftar ({count})"), KeyboardButton(text="🔄 Yangilash")]],
         resize_keyboard=True,
     )
 
@@ -68,7 +68,6 @@ def daftar_reply_keyboard(count: int) -> ReplyKeyboardMarkup:
 def day_review_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🔄 Yangilash", callback_data="day_refresh")],
             [
                 InlineKeyboardButton(text="✏️ Tahrirlash", callback_data="day_edit_hint"),
                 InlineKeyboardButton(text="🗑 O'chirish", callback_data="day_delete_prompt"),

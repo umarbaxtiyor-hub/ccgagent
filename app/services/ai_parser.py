@@ -1,5 +1,6 @@
 import base64
 import json
+import logging
 from datetime import date
 from typing import Any
 
@@ -7,7 +8,10 @@ import aiohttp
 
 from app.config import settings
 
+logger = logging.getLogger(__name__)
+
 _GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+_OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions"
 
 _TRANSACTION_ITEM_SCHEMA = {
     "type": "OBJECT",
@@ -87,6 +91,29 @@ _TRANSACTIONS_SCHEMA = {
     "required": ["transactions"],
 }
 
+_EDIT_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "row_index": {
+            "type": "INTEGER",
+            "description": "Foydalanuvchi tuzatishni so'rayotgan qatorning raqami (ro'yxatda 1 dan boshlanadi)",
+        },
+        "type": {"type": "STRING", "enum": ["income", "expense"]},
+        "amount": {"type": "NUMBER", "description": "Qatorning (tuzatilgandan keyingi) umumiy summasi"},
+        "category": {"type": "STRING"},
+        "description": {"type": "STRING"},
+        "quantity": {"type": "NUMBER"},
+        "unit": {"type": "STRING"},
+        "unit_price": {"type": "NUMBER"},
+        "confidence": {
+            "type": "STRING",
+            "enum": ["high", "low"],
+            "description": "Qaysi qatorni va nimani o'zgartirish kerakligi aniq bo'lmasa 'low'",
+        },
+    },
+    "required": ["row_index", "type", "amount", "category", "description", "confidence"],
+}
+
 _BANK_ROWS_SCHEMA = {
     "type": "OBJECT",
     "properties": {
@@ -107,7 +134,7 @@ _BANK_ROWS_SCHEMA = {
 }
 
 
-async def _generate_json(parts: list[dict[str, Any]], schema: dict[str, Any]) -> dict:
+async def _generate_json_gemini(parts: list[dict[str, Any]], schema: dict[str, Any]) -> dict:
     url = _GEMINI_API_URL.format(model=settings.gemini_model)
     payload = {
         "contents": [{"role": "user", "parts": parts}],
@@ -133,6 +160,95 @@ async def _generate_json(parts: list[dict[str, Any]], schema: dict[str, Any]) ->
     except (KeyError, IndexError) as e:
         raise ValueError(f"Gemini javobida matn topilmadi: {data}") from e
     return json.loads(text)
+
+
+def _schema_to_prompt_hint(schema: dict[str, Any], indent: int = 0) -> str:
+    """Renders a Gemini-style response_schema as a human-readable field guide,
+    since OpenAI's plain JSON mode (used as a fallback) has no schema param -
+    the shape has to be spelled out in the prompt text instead."""
+    pad = "  " * indent
+    node_type = schema["type"]
+    if node_type == "OBJECT":
+        required = set(schema.get("required", []))
+        lines = ["{"]
+        for key, sub in schema.get("properties", {}).items():
+            marker = "majburiy" if key in required else "ixtiyoriy"
+            desc = sub.get("description", "")
+            lines.append(f'{pad}  "{key}": {_schema_to_prompt_hint(sub, indent + 1)}  // {marker}. {desc}')
+        lines.append(pad + "}")
+        return "\n".join(lines)
+    if node_type == "ARRAY":
+        return f"[{_schema_to_prompt_hint(schema['items'], indent)}, ...]"
+    if node_type == "STRING":
+        enum = schema.get("enum")
+        return f"\"{' | '.join(enum)}\"" if enum else '"matn"'
+    if node_type in ("NUMBER", "INTEGER"):
+        return "raqam"
+    return "aniqlanmagan"
+
+
+def _parts_to_openai_content(parts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    content = []
+    for part in parts:
+        if "text" in part:
+            content.append({"type": "text", "text": part["text"]})
+        elif "inline_data" in part:
+            mime = part["inline_data"]["mime_type"]
+            b64 = part["inline_data"]["data"]
+            content.append({"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}})
+    return content
+
+
+async def _generate_json_openai(parts: list[dict[str, Any]], schema: dict[str, Any]) -> dict:
+    content = _parts_to_openai_content(parts)
+    content.append(
+        {
+            "type": "text",
+            "text": (
+                "\n\nFaqat quyidagi ko'rinishdagi JSON obyekt qaytar, boshqa hech qanday matn, "
+                "izoh yoki kod bloki yozma:\n" + _schema_to_prompt_hint(schema)
+            ),
+        }
+    )
+    payload = {
+        "model": settings.openai_model,
+        "messages": [{"role": "user", "content": content}],
+        "response_format": {"type": "json_object"},
+    }
+    async with aiohttp.ClientSession() as session:
+        async with session.post(
+            _OPENAI_CHAT_URL,
+            headers={"Authorization": f"Bearer {settings.openai_api_key}"},
+            json=payload,
+            timeout=aiohttp.ClientTimeout(total=60),
+        ) as resp:
+            if resp.status != 200:
+                text = await resp.text()
+                raise RuntimeError(f"OpenAI API error {resp.status}: {text}")
+            data = await resp.json()
+
+    try:
+        text = data["choices"][0]["message"]["content"]
+    except (KeyError, IndexError) as e:
+        raise ValueError(f"OpenAI javobida matn topilmadi: {data}") from e
+    return json.loads(text)
+
+
+async def _generate_json(parts: list[dict[str, Any]], schema: dict[str, Any]) -> dict:
+    """Tries Gemini first; if it fails (quota, rate-limit, network, etc.) and
+    an OpenAI key is configured, transparently retries via OpenAI so a single
+    provider's outage/quota doesn't take the bot down."""
+    try:
+        return await _generate_json_gemini(parts, schema)
+    except Exception as gemini_error:
+        if not settings.openai_api_key:
+            raise
+        logger.warning("Gemini failed (%s), falling back to OpenAI", gemini_error)
+        try:
+            return await _generate_json_openai(parts, schema)
+        except Exception:
+            logger.exception("OpenAI fallback also failed")
+            raise
 
 
 async def parse_expense_text(
@@ -203,3 +319,28 @@ async def categorize_bank_rows(
     )
     parsed = await _generate_json([{"text": prompt}], _BANK_ROWS_SCHEMA)
     return {item["row_index"]: item for item in parsed["results"]}
+
+
+async def parse_daftar_edit(
+    rows_text: str,
+    instruction: str,
+    expense_categories: list[str],
+    income_categories: list[str],
+) -> dict:
+    """Given the numbered list of a user's current unconfirmed Daftar rows and
+    a free-text correction instruction (e.g. "2-qatordagi benzin summasini
+    350000 qiling"), figures out which row is meant and returns its full
+    corrected fields - unmentioned fields are kept the same as the current
+    value shown in rows_text."""
+    prompt = (
+        f"Chiqim kategoriyalari: {', '.join(expense_categories)}\n"
+        f"Kirim kategoriyalari: {', '.join(income_categories)}\n\n"
+        f"Foydalanuvchining hozirgi tasdiqlanmagan yozuvlari (Daftar) ro'yxati:\n{rows_text}\n\n"
+        f"Foydalanuvchi shu ro'yxatdagi bitta qatorni to'g'irlashni so'rab yozdi:\n\"{instruction}\"\n\n"
+        "Qaysi qator (row_index, ro'yxatdagi raqami) nazarda tutilganini aniqla va o'sha qatorning "
+        "TO'LIQ, tuzatilgandan keyingi holatini qaytar: foydalanuvchi nima haqida yozgan bo'lsa - shuni "
+        "o'zgartir, boshqa barcha maydonlarni ro'yxatda ko'rsatilgan joriy qiymati bilan bir xil qoldir. "
+        "Agar qaysi qator yoki nima o'zgarishi noaniq bo'lsa, confidence='low' qo'y."
+    )
+    result = await _generate_json([{"text": prompt}], _EDIT_SCHEMA)
+    return result

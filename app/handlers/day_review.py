@@ -5,7 +5,9 @@ from html import escape as h
 
 from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.filters import Command
+from aiogram.filters import Command, StateFilter
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,9 +21,16 @@ from app.handlers.keyboards import (
     day_review_keyboard,
     day_row_picker_keyboard,
 )
-from app.models import Transaction
+from app.models import Transaction, TransactionType
+from app.services.ai_parser import parse_daftar_edit
+from app.services.categories import category_names, get_or_create_category
 from app.services.sheets import append_transaction_row
 from app.services.users import get_or_create_user
+
+
+class DaftarEdit(StatesGroup):
+    waiting_instruction = State()
+
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -213,6 +222,23 @@ async def open_daftar_button(message: Message) -> None:
     await message.answer(text, reply_markup=markup)
 
 
+@router.message(F.text == "🔄 Yangilash", AllowedUser())
+async def refresh_main_menu(message: Message) -> None:
+    """Reply-keyboard buttons can't update their own label, so this resends
+    the keyboard with a fresh unconfirmed-count on the Daftar button."""
+    async with async_session() as session:
+        user = await get_or_create_user(
+            session,
+            telegram_id=message.from_user.id,
+            full_name=message.from_user.full_name,
+            username=message.from_user.username or "",
+        )
+        count = len(await _unconfirmed_for_user(session, user.id))
+    await message.answer(
+        f"🔄 Yangilandi: {count} ta tasdiqlanmagan yozuv.", reply_markup=daftar_reply_keyboard(count)
+    )
+
+
 @router.callback_query(F.data == "ack_goto_daftar")
 async def ack_goto_daftar(callback: CallbackQuery) -> None:
     async with async_session() as session:
@@ -235,11 +261,89 @@ async def ack_edit_hint(callback: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data == "day_edit_hint")
-async def day_edit_hint(callback: CallbackQuery) -> None:
-    await callback.answer(_EDIT_HINT, show_alert=True)
+async def day_edit_hint(callback: CallbackQuery, state: FSMContext) -> None:
+    async with async_session() as session:
+        user = await get_or_create_user(
+            session,
+            telegram_id=callback.from_user.id,
+            full_name=callback.from_user.full_name,
+            username=callback.from_user.username or "",
+        )
+        transactions = await _unconfirmed_for_user(session, user.id)
+
+    if not transactions:
+        await callback.answer("Tasdiqlanmagan yozuvlar yo'q.", show_alert=True)
+        return
+
+    await state.set_state(DaftarEdit.waiting_instruction)
+    await callback.message.answer(
+        "Qaysi qatorni va nimasini o'zgartirish kerakligini yozib yuboring.\n"
+        "Masalan: \"2-qatordagi benzin summasini 350000 qiling\" yoki \"1-qatorni 5 donaga o'zgartir\"."
+    )
+    await callback.answer()
 
 
-@router.callback_query(F.data.in_({"day_list", "day_refresh"}))
+@router.message(StateFilter(DaftarEdit.waiting_instruction), F.text, AllowedUser())
+async def apply_edit_instruction(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    async with async_session() as session:
+        user = await get_or_create_user(
+            session,
+            telegram_id=message.from_user.id,
+            full_name=message.from_user.full_name,
+            username=message.from_user.username or "",
+        )
+        transactions = await _unconfirmed_for_user(session, user.id)
+        if not transactions:
+            await message.answer("Tasdiqlanmagan yozuvlar yo'q.")
+            return
+
+        rows_text = "\n".join(
+            f"{i}. {t.description or t.counterparty or (t.category.name if t.category else '-')} - "
+            f"miqdor: {t.quantity or 0} {t.unit or ''}, summa: {_fmt_amount(float(t.amount))} so'm, "
+            f"turi: {t.type.value}"
+            for i, t in enumerate(transactions, start=1)
+        )
+        expense_cats = await category_names(session, TransactionType.expense)
+        income_cats = await category_names(session, TransactionType.income)
+
+        try:
+            edit = await parse_daftar_edit(rows_text, message.text, expense_cats, income_cats)
+        except Exception:
+            logger.exception("parse_daftar_edit failed")
+            await message.answer(
+                "Kechirasiz, o'zgartirishni tushuna olmadim. Iltimos, qator raqami va nimani "
+                "o'zgartirishni aniqroq yozing."
+            )
+            return
+
+        row_index = edit.get("row_index")
+        if edit.get("confidence") == "low" or not row_index or not (1 <= row_index <= len(transactions)):
+            await message.answer(
+                "Qaysi qatorni va nimani o'zgartirish kerakligini aniq tushuna olmadim. Iltimos, "
+                "masalan \"2-qatordagi summani 350000 qiling\" kabi aniqroq yozing."
+            )
+            return
+
+        tx = transactions[row_index - 1]
+        type_enum = TransactionType(edit["type"])
+        category = await get_or_create_category(session, edit["category"], type_enum)
+        tx.type = type_enum
+        tx.category_id = category.id
+        tx.amount = float(edit["amount"])
+        tx.description = edit.get("description") or tx.description
+        tx.quantity = float(edit.get("quantity") or 0)
+        tx.unit = edit.get("unit") or tx.unit
+        tx.unit_price = float(edit.get("unit_price") or 0)
+        await session.commit()
+
+        text, markup = await _render_day_list(session, user.id)
+
+    await message.answer("✅ Yozuv yangilandi.")
+    await message.answer(text, reply_markup=markup)
+
+
+@router.callback_query(F.data == "day_list")
 async def show_day_list(callback: CallbackQuery) -> None:
     async with async_session() as session:
         text, markup = await _open_daftar(
@@ -250,7 +354,7 @@ async def show_day_list(callback: CallbackQuery) -> None:
     except TelegramBadRequest as e:
         if "message is not modified" not in str(e):
             raise
-    await callback.answer("Yangilandi" if callback.data == "day_refresh" else None)
+    await callback.answer()
 
 
 @router.callback_query(F.data == "day_delete_prompt")

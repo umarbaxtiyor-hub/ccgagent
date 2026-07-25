@@ -15,12 +15,10 @@ from app.config import settings
 from app.db import async_session
 from app.handlers.keyboards import (
     daftar_reply_keyboard,
-    day_category_choice_keyboard,
     day_review_keyboard,
     day_row_picker_keyboard,
 )
 from app.models import Transaction
-from app.services.categories import category_names, get_or_create_category
 from app.services.sheets import append_transaction_row
 from app.services.users import get_or_create_user
 
@@ -179,7 +177,7 @@ async def _render_day_list(session: AsyncSession, user_id: int) -> tuple[str, In
     transactions = await _unconfirmed_for_user(session, user_id)
     if not transactions:
         return "Tasdiqlanmagan yozuvlar yo'q.", None
-    text = format_day_review(transactions) + "\n\nTahrirlash yoki o'chirish uchun tugmani bosing."
+    text = format_day_review(transactions) + "\n\nO'chirish yoki barchasini tasdiqlash uchun tugmani bosing."
     return text, day_review_keyboard()
 
 
@@ -235,26 +233,6 @@ async def show_day_list(callback: CallbackQuery) -> None:
     await callback.answer()
 
 
-@router.callback_query(F.data == "day_edit_prompt")
-async def edit_prompt(callback: CallbackQuery) -> None:
-    async with async_session() as session:
-        user = await get_or_create_user(
-            session,
-            telegram_id=callback.from_user.id,
-            full_name=callback.from_user.full_name,
-            username=callback.from_user.username or "",
-        )
-        transactions = await _unconfirmed_for_user(session, user.id)
-
-    if not transactions:
-        await callback.answer("Tasdiqlanmagan yozuvlar yo'q.", show_alert=True)
-        return
-
-    text = format_day_review(transactions) + "\n\n<b>O'zgartiriladigan yozuv raqamini tanlang.</b>"
-    await callback.message.edit_text(text, reply_markup=day_row_picker_keyboard(transactions, "edit"))
-    await callback.answer()
-
-
 @router.callback_query(F.data == "day_delete_prompt")
 async def delete_prompt(callback: CallbackQuery) -> None:
     async with async_session() as session:
@@ -273,55 +251,6 @@ async def delete_prompt(callback: CallbackQuery) -> None:
     text = format_day_review(transactions) + "\n\n<b>O'chiriladigan yozuv raqamini tanlang.</b>"
     await callback.message.edit_text(text, reply_markup=day_row_picker_keyboard(transactions, "del"))
     await callback.answer()
-
-
-@router.callback_query(F.data.startswith("day_pick_edit:"))
-async def choose_category(callback: CallbackQuery) -> None:
-    tx_id = int(callback.data.split(":", 1)[1])
-    async with async_session() as session:
-        user = await get_or_create_user(
-            session,
-            telegram_id=callback.from_user.id,
-            full_name=callback.from_user.full_name,
-            username=callback.from_user.username or "",
-        )
-        tx = await session.get(Transaction, tx_id)
-        if tx is None or tx.confirmed or tx.created_by_id != user.id:
-            await callback.answer("Bu yozuv topilmadi.", show_alert=True)
-            return
-        cats = await category_names(session, tx.type)
-
-    await callback.message.edit_reply_markup(reply_markup=day_category_choice_keyboard(tx_id, cats))
-    await callback.answer()
-
-
-@router.callback_query(F.data.startswith("day_setcat:"))
-async def set_category(callback: CallbackQuery) -> None:
-    _, tx_id_str, idx_str = callback.data.split(":", 2)
-    tx_id = int(tx_id_str)
-    async with async_session() as session:
-        user = await get_or_create_user(
-            session,
-            telegram_id=callback.from_user.id,
-            full_name=callback.from_user.full_name,
-            username=callback.from_user.username or "",
-        )
-        tx = await session.get(Transaction, tx_id)
-        if tx is None or tx.confirmed or tx.created_by_id != user.id:
-            await callback.answer("Bu yozuv topilmadi.", show_alert=True)
-            return
-
-        cats = await category_names(session, tx.type)
-        idx = int(idx_str)
-        if 0 <= idx < len(cats):
-            category = await get_or_create_category(session, cats[idx], tx.type)
-            tx.category_id = category.id
-        await session.commit()
-
-        text, markup = await _render_day_list(session, user.id)
-
-    await callback.message.edit_text(text, reply_markup=markup)
-    await callback.answer("Kategoriya yangilandi")
 
 
 @router.callback_query(F.data.startswith("day_pick_del:"))
@@ -404,23 +333,3 @@ async def confirm_all(callback: CallbackQuery) -> None:
             await callback.bot.send_message(chat_id=recipient_id, text=report_text)
         except Exception:
             logger.exception("Failed to send daily report to recipient")
-
-
-@router.callback_query(F.data == "day_cancel_all")
-async def cancel_all(callback: CallbackQuery) -> None:
-    async with async_session() as session:
-        user = await get_or_create_user(
-            session,
-            telegram_id=callback.from_user.id,
-            full_name=callback.from_user.full_name,
-            username=callback.from_user.username or "",
-        )
-        transactions = await _unconfirmed_for_user(session, user.id)
-        count = len(transactions)
-        for t in transactions:
-            await session.delete(t)
-        await session.commit()
-
-    await callback.message.edit_text(f"❌ {count} ta yozuv bekor qilindi.", reply_markup=None)
-    await callback.answer("Bekor qilindi")
-    await callback.message.answer("📒 Daftar bo'sh.", reply_markup=daftar_reply_keyboard(0))

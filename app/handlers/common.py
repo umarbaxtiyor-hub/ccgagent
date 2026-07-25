@@ -40,7 +40,7 @@ async def require_project(session: AsyncSession, message: Message, user: User) -
 
 
 async def parse_and_save_transactions(
-    session: AsyncSession, user: User, text: str, source: str
+    session: AsyncSession, user: User, text: str, source: str, source_message_id: int | None = None
 ) -> tuple[list[dict], list[int]] | str:
     """Parses text and immediately persists each valid item as an unconfirmed
     Transaction (no per-message tap-confirm) - the user reviews and confirms
@@ -85,6 +85,7 @@ async def parse_and_save_transactions(
             unit_price=float(parsed.get("unit_price") or 0),
             payment_type=parsed.get("payment_type", "naqd"),
             raw_text=text,
+            source_message_id=source_message_id,
         )
         session.add(tx)
         created.append(tx)

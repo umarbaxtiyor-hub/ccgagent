@@ -35,18 +35,3 @@ def get_pending_bank(key: str) -> PendingBankImport | None:
 
 def pop_pending_bank(key: str) -> PendingBankImport | None:
     return _pending_bank.pop(key, None)
-
-
-# Maps a user's own text message (chat_id, message_id) to the unconfirmed
-# transaction ids it produced and the bot's ack message id. When the user
-# edits that original message in Telegram, we look it up here to know what
-# to replace and which bot message to update in place.
-_editable_messages: dict[tuple[int, int], dict] = {}
-
-
-def remember_editable(chat_id: int, message_id: int, tx_ids: list[int], bot_message_id: int) -> None:
-    _editable_messages[(chat_id, message_id)] = {"tx_ids": tx_ids, "bot_message_id": bot_message_id}
-
-
-def get_editable(chat_id: int, message_id: int) -> dict | None:
-    return _editable_messages.get((chat_id, message_id))

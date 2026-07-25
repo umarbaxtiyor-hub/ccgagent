@@ -9,7 +9,6 @@ from app.db import async_session
 from app.handlers.common import parse_and_save_transactions, require_project
 from app.handlers.day_review import format_ack_table
 from app.handlers.keyboards import ack_choice_keyboard
-from app.handlers.pending_store import get_editable, remember_editable
 from app.models import Transaction, TransactionSource
 from app.services.users import get_or_create_user
 
@@ -17,14 +16,15 @@ router = Router()
 logger = logging.getLogger(__name__)
 
 
-async def _delete_transactions(session, tx_ids: list[int], user_id: int) -> None:
-    if not tx_ids:
-        return
-    result = await session.execute(select(Transaction).where(Transaction.id.in_(tx_ids)))
-    for tx in result.scalars().all():
-        if not tx.confirmed and tx.created_by_id == user_id:
-            await session.delete(tx)
-    await session.commit()
+async def _find_by_source_message(session, user_id: int, message_id: int) -> list[Transaction]:
+    result = await session.execute(
+        select(Transaction).where(
+            Transaction.created_by_id == user_id,
+            Transaction.source_message_id == message_id,
+            Transaction.confirmed.is_(False),
+        )
+    )
+    return list(result.scalars().all())
 
 
 @router.message(F.text, ~F.text.startswith("/"), AllowedUser())
@@ -40,7 +40,7 @@ async def handle_text_entry(message: Message) -> None:
             return
 
         result = await parse_and_save_transactions(
-            session, user, message.text, TransactionSource.manual_text.value
+            session, user, message.text, TransactionSource.manual_text.value, message.message_id
         )
         if isinstance(result, str):
             await message.answer(result)
@@ -53,7 +53,12 @@ async def handle_text_entry(message: Message) -> None:
     ack = await message.answer(
         format_ack_table(items, project_name, reporter_name), reply_markup=ack_choice_keyboard()
     )
-    remember_editable(message.chat.id, message.message_id, tx_ids, ack.message_id)
+
+    async with async_session() as session:
+        result = await session.execute(select(Transaction).where(Transaction.id.in_(tx_ids)))
+        for tx in result.scalars().all():
+            tx.ack_message_id = ack.message_id
+        await session.commit()
 
 
 @router.edited_message(F.text, ~F.text.startswith("/"), AllowedUser())
@@ -61,10 +66,6 @@ async def handle_text_edit(message: Message) -> None:
     """A user editing their own already-sent expense message (Telegram's
     native message-edit, not a bot button) re-parses it and updates the
     same ack message in place, replacing whatever it had created before."""
-    editable = get_editable(message.chat.id, message.message_id)
-    if editable is None:
-        return
-
     async with async_session() as session:
         user = await get_or_create_user(
             session,
@@ -72,30 +73,46 @@ async def handle_text_edit(message: Message) -> None:
             full_name=message.from_user.full_name,
             username=message.from_user.username or "",
         )
-        await _delete_transactions(session, editable["tx_ids"], user.id)
+
+        old_txs = await _find_by_source_message(session, user.id, message.message_id)
+        if not old_txs:
+            return
+
+        ack_message_id = old_txs[0].ack_message_id
+        for tx in old_txs:
+            await session.delete(tx)
+        await session.commit()
 
         result = await parse_and_save_transactions(
-            session, user, message.text, TransactionSource.manual_text.value
+            session, user, message.text, TransactionSource.manual_text.value, message.message_id
         )
         if isinstance(result, str):
-            remember_editable(message.chat.id, message.message_id, [], editable["bot_message_id"])
-            try:
-                await message.bot.edit_message_text(
-                    chat_id=message.chat.id, message_id=editable["bot_message_id"], text=result
-                )
-            except Exception:
-                logger.exception("Failed to update ack message after edit")
+            if ack_message_id:
+                try:
+                    await message.bot.edit_message_text(
+                        chat_id=message.chat.id, message_id=ack_message_id, text=result
+                    )
+                except Exception:
+                    logger.exception("Failed to update ack message after edit")
             return
 
         items, tx_ids = result
         project_name = user.current_project.name if user.current_project else "-"
         reporter_name = user.full_name or user.username or "Xodim"
 
-    remember_editable(message.chat.id, message.message_id, tx_ids, editable["bot_message_id"])
+        if ack_message_id:
+            new_tx_result = await session.execute(select(Transaction).where(Transaction.id.in_(tx_ids)))
+            for tx in new_tx_result.scalars().all():
+                tx.ack_message_id = ack_message_id
+            await session.commit()
+
+    if not ack_message_id:
+        return
+
     try:
         await message.bot.edit_message_text(
             chat_id=message.chat.id,
-            message_id=editable["bot_message_id"],
+            message_id=ack_message_id,
             text=format_ack_table(items, project_name, reporter_name),
             reply_markup=ack_choice_keyboard(),
         )

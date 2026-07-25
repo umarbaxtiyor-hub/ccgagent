@@ -73,19 +73,15 @@ def daftar_reply_keyboard(count: int) -> ReplyKeyboardMarkup:
 def day_review_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(text="✏️ Tahrirlash", callback_data="day_edit_prompt"),
-                InlineKeyboardButton(text="🗑 O'chirish", callback_data="day_delete_prompt"),
-            ],
+            [InlineKeyboardButton(text="🗑 O'chirish", callback_data="day_delete_prompt")],
             [InlineKeyboardButton(text="✅ Hammasini tasdiqlash", callback_data="day_confirm_all")],
-            [InlineKeyboardButton(text="🗑 Tozalash", callback_data="day_cancel_all")],
         ]
     )
 
 
 def day_row_picker_keyboard(transactions: list[Transaction], action: str) -> InlineKeyboardMarkup:
-    """Compact numbered grid so the user can pick which row to edit/delete
-    without one button-pair per row cluttering the screen."""
+    """Compact numbered grid so the user can pick which row to delete
+    without one button per row cluttering the screen."""
     rows = []
     chunk_size = 5
     for i in range(0, len(transactions), chunk_size):
@@ -94,20 +90,6 @@ def day_row_picker_keyboard(transactions: list[Transaction], action: str) -> Inl
             [
                 InlineKeyboardButton(text=str(i + offset + 1), callback_data=f"day_pick_{action}:{t.id}")
                 for offset, t in enumerate(chunk)
-            ]
-        )
-    rows.append([InlineKeyboardButton(text="Orqaga", callback_data="day_list")])
-    return InlineKeyboardMarkup(inline_keyboard=rows)
-
-
-def day_category_choice_keyboard(tx_id: int, categories: list[str]) -> InlineKeyboardMarkup:
-    rows = []
-    for i in range(0, len(categories), 2):
-        chunk = categories[i : i + 2]
-        rows.append(
-            [
-                InlineKeyboardButton(text=name, callback_data=f"day_setcat:{tx_id}:{idx}")
-                for idx, name in zip(range(i, i + len(chunk)), chunk)
             ]
         )
     rows.append([InlineKeyboardButton(text="Orqaga", callback_data="day_list")])

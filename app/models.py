@@ -76,6 +76,13 @@ class Transaction(Base):
     payment_type: Mapped[str] = mapped_column(String(20), default="naqd")
     raw_text: Mapped[str] = mapped_column(Text, default="")
 
+    # For native Telegram message-edit support: which of the user's own
+    # messages produced this row, and which bot ack message to update in
+    # place when they edit it. Persisted in the DB (not process memory) so
+    # editing keeps working across deploys/restarts.
+    source_message_id: Mapped[int | None] = mapped_column(nullable=True)
+    ack_message_id: Mapped[int | None] = mapped_column(nullable=True)
+
     category_id: Mapped[int] = mapped_column(ForeignKey("categories.id"))
     category: Mapped["Category"] = relationship(back_populates="transactions")
 

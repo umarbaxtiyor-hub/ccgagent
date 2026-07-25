@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     allowed_user_ids: str = ""
     sheets_webhook_url: str = ""
     sheets_webhook_secret: str = ""
+    report_recipient_id: str = ""
 
     @field_validator("database_url")
     @classmethod

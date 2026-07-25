@@ -39,6 +39,11 @@ Telegram bot orqali kunlik xarajatlar va bank hisobidan o'tadigan pullarni
   tasdiqlangan (yoki bank ko'chirmasidan tasdiqlangan) har bir tranzaksiya
   avtomatik ravishda mavjud Google Sheet jadvaliga qator bo'lib qo'shiladi
   (pastdagi "Google Sheetsga ulash" bo'limiga qarang).
+- **Avtomatik kunlik hisobot (ixtiyoriy)**: `REPORT_RECIPIENT_ID` sozlansa,
+  har safar kimdir `/kun_yakuni`ni "Barchasini tasdiqlash" bilan yakunlaganda,
+  o'sha kunlik yozuvlar bo'yicha Excel hisobot avtomatik shu Telegram ID'ga
+  yuboriladi. Har bir foydalanuvchi o'z ID'sini `/mening_id` orqali bilib
+  olishi mumkin.
 
 ## O'rnatish
 

@@ -53,11 +53,26 @@ def format_queued_ack(items: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def format_day_review(transactions: list[Transaction]) -> str:
-    lines = [f"<b>{len(transactions)} ta tasdiqlanmagan yozuv:</b>\n"]
-    total_expense = 0.0
-    total_income = 0.0
-    for i, t in enumerate(transactions, start=1):
+DAY_PAGE_SIZE = 8
+
+
+def _total_pages(count: int, page_size: int = DAY_PAGE_SIZE) -> int:
+    return max(1, (count + page_size - 1) // page_size)
+
+
+def format_day_review(transactions: list[Transaction], page: int = 0, page_size: int = DAY_PAGE_SIZE) -> str:
+    total = len(transactions)
+    total_pages = _total_pages(total, page_size)
+    start = page * page_size
+    page_items = transactions[start : start + page_size]
+
+    header = f"<b>{total} ta tasdiqlanmagan yozuv</b>"
+    if total_pages > 1:
+        header += f" (sahifa {page + 1}/{total_pages})"
+    lines = [header + ":\n"]
+
+    for offset, t in enumerate(page_items):
+        i = start + offset + 1
         type_label = "Kirim" if t.type.value == "income" else "Chiqim"
         amount = float(t.amount)
         amount_str = f"{amount:,.0f}".replace(",", " ")
@@ -65,10 +80,9 @@ def format_day_review(transactions: list[Transaction]) -> str:
         if t.description:
             line += f" - {t.description}"
         lines.append(line)
-        if t.type.value == "income":
-            total_income += amount
-        else:
-            total_expense += amount
+
+    total_expense = sum(float(t.amount) for t in transactions if t.type.value == "expense")
+    total_income = sum(float(t.amount) for t in transactions if t.type.value == "income")
 
     lines.append("")
     if total_expense:
@@ -79,29 +93,45 @@ def format_day_review(transactions: list[Transaction]) -> str:
     return "\n".join(lines)
 
 
-def day_review_keyboard(transactions: list[Transaction]) -> InlineKeyboardMarkup:
+def day_review_keyboard(
+    transactions: list[Transaction], page: int = 0, page_size: int = DAY_PAGE_SIZE
+) -> InlineKeyboardMarkup:
+    total_pages = _total_pages(len(transactions), page_size)
+    start = page * page_size
+    page_items = transactions[start : start + page_size]
+
     rows = []
-    for i, t in enumerate(transactions, start=1):
+    for offset, t in enumerate(page_items):
+        i = start + offset + 1
         rows.append(
             [
-                InlineKeyboardButton(text=f"✏️ {i}", callback_data=f"day_cat:{t.id}"),
-                InlineKeyboardButton(text=f"🗑 {i}", callback_data=f"day_del:{t.id}"),
+                InlineKeyboardButton(text=f"✏️ {i}", callback_data=f"day_cat:{t.id}:{page}"),
+                InlineKeyboardButton(text=f"🗑 {i}", callback_data=f"day_del:{t.id}:{page}"),
             ]
         )
+
+    if total_pages > 1:
+        nav_row = []
+        if page > 0:
+            nav_row.append(InlineKeyboardButton(text="◀️ Oldingi", callback_data=f"day_page:{page - 1}"))
+        if page < total_pages - 1:
+            nav_row.append(InlineKeyboardButton(text="Keyingi ▶️", callback_data=f"day_page:{page + 1}"))
+        rows.append(nav_row)
+
     rows.append([InlineKeyboardButton(text="✅ Barchasini tasdiqlash", callback_data="day_confirm_all")])
     rows.append([InlineKeyboardButton(text="❌ Hammasini bekor qilish", callback_data="day_cancel_all")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def day_category_choice_keyboard(tx_id: int, categories: list[str]) -> InlineKeyboardMarkup:
+def day_category_choice_keyboard(tx_id: int, categories: list[str], page: int = 0) -> InlineKeyboardMarkup:
     rows = []
     for i in range(0, len(categories), 2):
         chunk = categories[i : i + 2]
         rows.append(
             [
-                InlineKeyboardButton(text=name, callback_data=f"day_setcat:{tx_id}:{idx}")
+                InlineKeyboardButton(text=name, callback_data=f"day_setcat:{tx_id}:{idx}:{page}")
                 for idx, name in zip(range(i, i + len(chunk)), chunk)
             ]
         )
-    rows.append([InlineKeyboardButton(text="Orqaga", callback_data="day_list")])
+    rows.append([InlineKeyboardButton(text="Orqaga", callback_data=f"day_list:{page}")])
     return InlineKeyboardMarkup(inline_keyboard=rows)

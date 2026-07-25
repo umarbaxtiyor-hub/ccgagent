@@ -20,12 +20,18 @@ WELCOME_TEXT = (
     "kategoriyalarga bo'lib qo'shaman.\n"
     "- /loyiha - qaysi loyiha (obyekt) uchun yozayotganingizni tanlash yoki almashtirish.\n"
     "- /loyiha_yarat &lt;nomi&gt; - yangi loyiha qo'shish.\n"
-    "- /report - kunlik/haftalik/oylik hisobotni Excel faylda olish.\n\n"
+    "- /report - kunlik/haftalik/oylik hisobotni Excel faylda olish.\n"
+    "- /mening_id - o'zingizning Telegram ID'ingizni bilib olish.\n\n"
     "Har bir xabaringizni darhol qabul qilib, kun davomida bir joyga yig'ib boraman - alohida "
     "tasdiqlashingiz shart emas. Kun oxirida /kun_yakuni buyrug'i bilan kiritilgan hammasini ko'rib "
     "chiqasiz: kerak bo'lsa kategoriyasini o'zgartirasiz yoki o'chirasiz, so'ng \"Barchasini "
     "tasdiqlash\" tugmasi bilan yakunlaysiz - shundagina hisobotga tushadi va Google Sheetga yuboriladi."
 )
+
+
+@router.message(Command("mening_id"))
+async def cmd_my_id(message: Message) -> None:
+    await message.answer(f"Sizning Telegram ID'ingiz: <code>{message.from_user.id}</code>")
 
 
 @router.message(Command("start"), AllowedUser())

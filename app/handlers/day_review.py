@@ -1,17 +1,20 @@
 import logging
+from datetime import date
 
 from aiogram import F, Router
 from aiogram.filters import Command
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
+from aiogram.types import BufferedInputFile, CallbackQuery, InlineKeyboardMarkup, Message
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.access import AllowedUser
+from app.config import settings
 from app.db import async_session
 from app.handlers.keyboards import day_category_choice_keyboard, day_review_keyboard, format_day_review
 from app.models import Transaction
 from app.services.categories import category_names, get_or_create_category
+from app.services.excel_export import build_report
 from app.services.sheets import append_transaction_row
 from app.services.users import get_or_create_user
 
@@ -33,11 +36,13 @@ async def _unconfirmed_for_user(session: AsyncSession, user_id: int) -> list[Tra
     return list(result.scalars().all())
 
 
-async def _render_day_list(session: AsyncSession, user_id: int) -> tuple[str, InlineKeyboardMarkup | None]:
+async def _render_day_list(
+    session: AsyncSession, user_id: int, page: int = 0
+) -> tuple[str, InlineKeyboardMarkup | None]:
     transactions = await _unconfirmed_for_user(session, user_id)
     if not transactions:
         return "Tasdiqlanmagan yozuvlar yo'q.", None
-    return format_day_review(transactions), day_review_keyboard(transactions)
+    return format_day_review(transactions, page), day_review_keyboard(transactions, page)
 
 
 @router.message(Command("kun_yakuni"), AllowedUser())
@@ -53,8 +58,9 @@ async def cmd_kun_yakuni(message: Message) -> None:
     await message.answer(text, reply_markup=markup)
 
 
-@router.callback_query(F.data == "day_list")
-async def show_day_list(callback: CallbackQuery) -> None:
+@router.callback_query(F.data.startswith("day_page:"))
+async def change_page(callback: CallbackQuery) -> None:
+    page = int(callback.data.split(":", 1)[1])
     async with async_session() as session:
         user = await get_or_create_user(
             session,
@@ -62,14 +68,30 @@ async def show_day_list(callback: CallbackQuery) -> None:
             full_name=callback.from_user.full_name,
             username=callback.from_user.username or "",
         )
-        text, markup = await _render_day_list(session, user.id)
+        text, markup = await _render_day_list(session, user.id, page)
+    await callback.message.edit_text(text, reply_markup=markup)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("day_list:"))
+async def show_day_list(callback: CallbackQuery) -> None:
+    page = int(callback.data.split(":", 1)[1])
+    async with async_session() as session:
+        user = await get_or_create_user(
+            session,
+            telegram_id=callback.from_user.id,
+            full_name=callback.from_user.full_name,
+            username=callback.from_user.username or "",
+        )
+        text, markup = await _render_day_list(session, user.id, page)
     await callback.message.edit_text(text, reply_markup=markup)
     await callback.answer()
 
 
 @router.callback_query(F.data.startswith("day_cat:"))
 async def choose_category(callback: CallbackQuery) -> None:
-    tx_id = int(callback.data.split(":", 1)[1])
+    _, tx_id_str, page_str = callback.data.split(":", 2)
+    tx_id, page = int(tx_id_str), int(page_str)
     async with async_session() as session:
         user = await get_or_create_user(
             session,
@@ -83,14 +105,14 @@ async def choose_category(callback: CallbackQuery) -> None:
             return
         cats = await category_names(session, tx.type)
 
-    await callback.message.edit_reply_markup(reply_markup=day_category_choice_keyboard(tx_id, cats))
+    await callback.message.edit_reply_markup(reply_markup=day_category_choice_keyboard(tx_id, cats, page))
     await callback.answer()
 
 
 @router.callback_query(F.data.startswith("day_setcat:"))
 async def set_category(callback: CallbackQuery) -> None:
-    _, tx_id_str, idx_str = callback.data.split(":", 2)
-    tx_id = int(tx_id_str)
+    _, tx_id_str, idx_str, page_str = callback.data.split(":", 3)
+    tx_id, page = int(tx_id_str), int(page_str)
     async with async_session() as session:
         user = await get_or_create_user(
             session,
@@ -110,7 +132,7 @@ async def set_category(callback: CallbackQuery) -> None:
             tx.category_id = category.id
         await session.commit()
 
-        text, markup = await _render_day_list(session, user.id)
+        text, markup = await _render_day_list(session, user.id, page)
 
     await callback.message.edit_text(text, reply_markup=markup)
     await callback.answer("Kategoriya yangilandi")
@@ -118,7 +140,8 @@ async def set_category(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data.startswith("day_del:"))
 async def delete_item(callback: CallbackQuery) -> None:
-    tx_id = int(callback.data.split(":", 1)[1])
+    _, tx_id_str, page_str = callback.data.split(":", 2)
+    tx_id, page = int(tx_id_str), int(page_str)
     async with async_session() as session:
         user = await get_or_create_user(
             session,
@@ -131,7 +154,7 @@ async def delete_item(callback: CallbackQuery) -> None:
             await session.delete(tx)
             await session.commit()
 
-        text, markup = await _render_day_list(session, user.id)
+        text, markup = await _render_day_list(session, user.id, page)
 
     await callback.message.edit_text(text, reply_markup=markup)
     await callback.answer("O'chirildi")
@@ -152,8 +175,10 @@ async def confirm_all(callback: CallbackQuery) -> None:
             return
 
         rows = []
+        occurred_dates = []
         for t in transactions:
             t.confirmed = True
+            occurred_dates.append(t.occurred_on)
             rows.append(
                 {
                     "sana": t.occurred_on.isoformat(),
@@ -172,6 +197,12 @@ async def confirm_all(callback: CallbackQuery) -> None:
             )
         await session.commit()
 
+        report_buffer = None
+        if settings.report_recipient_id:
+            report_buffer = await build_report(session, min(occurred_dates), max(occurred_dates))
+
+        reporter_name = user.full_name or user.username or "Xodim"
+
     for row in rows:
         await append_transaction_row(row)
 
@@ -179,6 +210,18 @@ async def confirm_all(callback: CallbackQuery) -> None:
         f"✅ {len(rows)} ta yozuv tasdiqlandi va Google Sheetga yuborildi.", reply_markup=None
     )
     await callback.answer("Tasdiqlandi")
+
+    if report_buffer is not None:
+        try:
+            recipient_id = int(settings.report_recipient_id)
+            filename = f"kun_yakuni_{date.today().isoformat()}.xlsx"
+            await callback.bot.send_document(
+                chat_id=recipient_id,
+                document=BufferedInputFile(report_buffer.read(), filename=filename),
+                caption=f"{reporter_name} kun yakunini tasdiqladi - {len(rows)} ta yozuv.",
+            )
+        except Exception:
+            logger.exception("Failed to send daily report to recipient")
 
 
 @router.callback_query(F.data == "day_cancel_all")

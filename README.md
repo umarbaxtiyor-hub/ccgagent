@@ -108,7 +108,10 @@ bering (quyida 2-band).
 3. Bot xizmatining "Variables" bo'limida qo'shing:
    - `BOT_TOKEN`
    - `GEMINI_API_KEY`
-   - `GEMINI_MODEL` (ixtiyoriy, standart: `gemini-flash-latest`)
+   - `GEMINI_MODEL` (ixtiyoriy, standart: `gemini-2.0-flash-lite` — bepul kvotasi
+     `gemini-flash-latest`/`gemini-2.5-flash`ga qaraganda ancha yuqori, shuning
+     uchun tez-tez 429 "quota exceeded" xatosiga duch kelmaslik uchun shu
+     model tanlangan)
    - `GROQ_API_KEY` (ovozli xabarlar uchun)
    - `ALLOWED_USER_IDS`
    - `DATABASE_URL` (yuqoridagi 2-band)

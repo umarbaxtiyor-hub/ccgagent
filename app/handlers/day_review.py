@@ -1,9 +1,10 @@
 import logging
+from collections import defaultdict
 from datetime import date
 
 from aiogram import F, Router
 from aiogram.filters import Command
-from aiogram.types import BufferedInputFile, CallbackQuery, InlineKeyboardMarkup, Message
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -14,12 +15,66 @@ from app.db import async_session
 from app.handlers.keyboards import day_category_choice_keyboard, day_review_keyboard, format_day_review
 from app.models import Transaction
 from app.services.categories import category_names, get_or_create_category
-from app.services.excel_export import build_report
 from app.services.sheets import append_transaction_row
 from app.services.users import get_or_create_user
 
 router = Router()
 logger = logging.getLogger(__name__)
+
+
+def _fmt_money(amount: float) -> str:
+    return f"{amount:,.0f}".replace(",", " ")
+
+
+def format_daily_text_report(rows: list[dict], reporter_name: str) -> str:
+    """Plain-text daily report for the CEO: per project, kirim/chiqim/balans
+    plus the expense list (nomi, hajmi, birim narx, jami narx, izoh)."""
+    by_project: dict[str, list[dict]] = defaultdict(list)
+    for row in rows:
+        by_project[row.get("loyiha") or "-"].append(row)
+
+    lines = [f"📋 <b>Kunlik hisobot</b> - {date.today().isoformat()}", f"👤 Kim: {reporter_name}"]
+
+    for project_name, project_rows in by_project.items():
+        expense_rows = [r for r in project_rows if r["_type"] == "expense"]
+        income_rows = [r for r in project_rows if r["_type"] == "income"]
+        total_expense = sum(r["umumiy_summa"] for r in expense_rows)
+        total_income = sum(r["umumiy_summa"] for r in income_rows)
+        balance = total_income - total_expense
+
+        lines.append("")
+        lines.append(f"🏗 <b>Loyiha: {project_name}</b>")
+        lines.append(f"💰 Kirim: {_fmt_money(total_income)} so'm")
+        lines.append(f"💸 Chiqim: {_fmt_money(total_expense)} so'm")
+        lines.append(f"⚖️ Balans: {_fmt_money(balance)} so'm")
+
+        if expense_rows:
+            lines.append("\n<b>Xarajatlar ro'yxati</b> (nomi - hajmi x birim narx = jami narx):")
+            for i, r in enumerate(expense_rows, start=1):
+                name = r.get("nomi") or "-"
+                qty = r.get("miqdor") or ""
+                unit = r.get("birlik") or ""
+                unit_price = r.get("birim_narx") or ""
+                total_str = _fmt_money(r["umumiy_summa"])
+                if qty and unit_price:
+                    line = f"{i}. {name} - {qty:g} {unit} x {_fmt_money(unit_price)} so'm = {total_str} so'm"
+                else:
+                    line = f"{i}. {name} - {total_str} so'm"
+                if r.get("izoh"):
+                    line += f" ({r['izoh']})"
+                lines.append(line)
+
+        if income_rows:
+            lines.append("\n<b>Kirimlar ro'yxati:</b>")
+            for i, r in enumerate(income_rows, start=1):
+                name = r.get("nomi") or "-"
+                total_str = _fmt_money(r["umumiy_summa"])
+                line = f"{i}. {name} - {total_str} so'm"
+                if r.get("izoh"):
+                    line += f" ({r['izoh']})"
+                lines.append(line)
+
+    return "\n".join(lines)
 
 
 async def _unconfirmed_for_user(session: AsyncSession, user_id: int) -> list[Transaction]:
@@ -181,6 +236,7 @@ async def confirm_all(callback: CallbackQuery) -> None:
             occurred_dates.append(t.occurred_on)
             rows.append(
                 {
+                    "_type": t.type.value,
                     "sana": t.occurred_on.isoformat(),
                     "nomi": t.description or t.counterparty,
                     "miqdor": float(t.quantity) or "",
@@ -197,29 +253,22 @@ async def confirm_all(callback: CallbackQuery) -> None:
             )
         await session.commit()
 
-        report_buffer = None
-        if settings.report_recipient_id:
-            report_buffer = await build_report(session, min(occurred_dates), max(occurred_dates))
-
         reporter_name = user.full_name or user.username or "Xodim"
 
     for row in rows:
-        await append_transaction_row(row)
+        sheet_row = {k: v for k, v in row.items() if k != "_type"}
+        await append_transaction_row(sheet_row)
 
     await callback.message.edit_text(
         f"✅ {len(rows)} ta yozuv tasdiqlandi va Google Sheetga yuborildi.", reply_markup=None
     )
     await callback.answer("Tasdiqlandi")
 
-    if report_buffer is not None:
+    if settings.report_recipient_id:
         try:
             recipient_id = int(settings.report_recipient_id)
-            filename = f"kun_yakuni_{date.today().isoformat()}.xlsx"
-            await callback.bot.send_document(
-                chat_id=recipient_id,
-                document=BufferedInputFile(report_buffer.read(), filename=filename),
-                caption=f"{reporter_name} kun yakunini tasdiqladi - {len(rows)} ta yozuv.",
-            )
+            report_text = format_daily_text_report(rows, reporter_name)
+            await callback.bot.send_message(chat_id=recipient_id, text=report_text)
         except Exception:
             logger.exception("Failed to send daily report to recipient")
 

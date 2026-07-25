@@ -66,6 +66,7 @@ async def handle_text_edit(message: Message) -> None:
     """A user editing their own already-sent expense message (Telegram's
     native message-edit, not a bot button) re-parses it and updates the
     same ack message in place, replacing whatever it had created before."""
+    logger.info("edited_message received: chat=%s message_id=%s", message.chat.id, message.message_id)
     async with async_session() as session:
         user = await get_or_create_user(
             session,
@@ -76,6 +77,11 @@ async def handle_text_edit(message: Message) -> None:
 
         old_txs = await _find_by_source_message(session, user.id, message.message_id)
         if not old_txs:
+            logger.info(
+                "No unconfirmed transactions found for edited message_id=%s (already confirmed/"
+                "deleted, or predates edit tracking) - ignoring",
+                message.message_id,
+            )
             return
 
         ack_message_id = old_txs[0].ack_message_id

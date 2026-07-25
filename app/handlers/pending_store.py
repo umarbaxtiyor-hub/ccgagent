@@ -37,29 +37,16 @@ def pop_pending_bank(key: str) -> PendingBankImport | None:
     return _pending_bank.pop(key, None)
 
 
-# Tracks the unconfirmed transaction ids behind the most recent "qabul
-# qilindi" acknowledgement per user, so tapping "Tahrirlash" knows what to
-# replace, and a flag for whether we're currently waiting on their
-# correction text (checked by the plain-text catch-all handler first).
-_last_ack_tx_ids: dict[int, list[int]] = {}
-_awaiting_correction: set[int] = set()
+# Maps a user's own text message (chat_id, message_id) to the unconfirmed
+# transaction ids it produced and the bot's ack message id. When the user
+# edits that original message in Telegram, we look it up here to know what
+# to replace and which bot message to update in place.
+_editable_messages: dict[tuple[int, int], dict] = {}
 
 
-def remember_ack(telegram_id: int, tx_ids: list[int]) -> None:
-    _last_ack_tx_ids[telegram_id] = tx_ids
+def remember_editable(chat_id: int, message_id: int, tx_ids: list[int], bot_message_id: int) -> None:
+    _editable_messages[(chat_id, message_id)] = {"tx_ids": tx_ids, "bot_message_id": bot_message_id}
 
 
-def get_ack_tx_ids(telegram_id: int) -> list[int] | None:
-    return _last_ack_tx_ids.get(telegram_id)
-
-
-def start_correction(telegram_id: int) -> None:
-    _awaiting_correction.add(telegram_id)
-
-
-def is_awaiting_correction(telegram_id: int) -> bool:
-    return telegram_id in _awaiting_correction
-
-
-def stop_correction(telegram_id: int) -> None:
-    _awaiting_correction.discard(telegram_id)
+def get_editable(chat_id: int, message_id: int) -> dict | None:
+    return _editable_messages.get((chat_id, message_id))

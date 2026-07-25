@@ -14,14 +14,11 @@ from app.access import AllowedUser
 from app.config import settings
 from app.db import async_session
 from app.handlers.keyboards import (
-    ack_keyboard,
-    correction_prompt_keyboard,
     daftar_reply_keyboard,
     day_category_choice_keyboard,
     day_review_keyboard,
     day_row_picker_keyboard,
 )
-from app.handlers.pending_store import get_ack_tx_ids, start_correction, stop_correction
 from app.models import Transaction
 from app.services.categories import category_names, get_or_create_category
 from app.services.sheets import append_transaction_row
@@ -400,41 +397,3 @@ async def cancel_all(callback: CallbackQuery) -> None:
     await callback.message.edit_text(f"❌ {count} ta yozuv bekor qilindi.", reply_markup=None)
     await callback.answer("Bekor qilindi")
     await callback.message.answer("📒 Daftar bo'sh.", reply_markup=daftar_reply_keyboard(0))
-
-
-@router.callback_query(F.data == "ack_edit")
-async def ack_edit(callback: CallbackQuery) -> None:
-    tx_ids = get_ack_tx_ids(callback.from_user.id)
-    if not tx_ids:
-        await callback.answer("Bu yozuv muddati o'tgan.", show_alert=True)
-        return
-
-    async with async_session() as session:
-        user = await get_or_create_user(
-            session,
-            telegram_id=callback.from_user.id,
-            full_name=callback.from_user.full_name,
-            username=callback.from_user.username or "",
-        )
-        result = await session.execute(select(Transaction).where(Transaction.id.in_(tx_ids)))
-        still_valid = [
-            t for t in result.scalars().all() if not t.confirmed and t.created_by_id == user.id
-        ]
-
-    if not still_valid:
-        await callback.answer("Bu yozuv muddati o'tgan.", show_alert=True)
-        return
-
-    start_correction(callback.from_user.id)
-    await callback.message.edit_reply_markup(reply_markup=None)
-    await callback.message.answer(
-        "✏️ Xabaringizni to'g'irlab qayta yozing:", reply_markup=correction_prompt_keyboard()
-    )
-    await callback.answer()
-
-
-@router.callback_query(F.data == "ack_cancel_edit")
-async def ack_cancel_edit(callback: CallbackQuery) -> None:
-    stop_correction(callback.from_user.id)
-    await callback.message.edit_text("❌ Bekor qilindi.", reply_markup=None)
-    await callback.answer("Bekor qilindi")

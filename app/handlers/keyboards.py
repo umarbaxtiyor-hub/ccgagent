@@ -52,18 +52,6 @@ def report_period_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def ack_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text="✏️ Tahrirlash", callback_data="ack_edit")]]
-    )
-
-
-def correction_prompt_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text="❌ Bekor qilish", callback_data="ack_cancel_edit")]]
-    )
-
-
 def daftar_reply_keyboard(count: int) -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text=f"📒 Daftar ({count})")]],

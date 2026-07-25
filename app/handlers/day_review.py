@@ -32,33 +32,24 @@ def _fmt_amount(amount: float) -> str:
     return f"{amount:,.0f}"
 
 
-_CATEGORY_ABBR = {
-    "Oziq-ovqat": "Ozuqa",
-    "Qurilish materiallari": "Material",
-    "Texnika va asboblar": "Texnika",
-    "Ijara": "Ijara",
-    "Ish haqi": "Ish haqi",
-    "Usta xizmati": "Usta",
-    "Transport": "Transp",
-    "Kommunal to'lovlar": "Kommunal",
-    "Soliq va yig'imlar": "Soliq",
-    "Boshqa xarajat": "Boshqa",
-    "Mijoz to'lovi": "Mijoz",
-    "Kredit / investitsiya": "Kredit",
-    "Boshqa daromad": "Boshqa",
-}
+_ABBR_STOPWORDS = {"va", "/"}
 
 
 def _abbr_category(name: str) -> str:
-    if name in _CATEGORY_ABBR:
-        return _CATEGORY_ABBR[name]
-    return name.split()[0] if name else "-"
+    """1 so'z -> shu so'zning birinchi 3 harfi; 2 (yoki ko'p) so'z -> har bir
+    so'zning bosh harfi ('va', '/' kabi bog'lovchilar hisobga olinmaydi)."""
+    words = [w.strip("/,") for w in name.split() if w.lower() not in _ABBR_STOPWORDS and w.strip("/,")]
+    if len(words) >= 2:
+        return "".join(w[0].upper() for w in words[:2])
+    if words:
+        return words[0][:3].capitalize()
+    return "-"
 
 
-_CAT_WIDTH = 8
-_NAME_WIDTH = 8
+_CAT_WIDTH = 4
+_NAME_WIDTH = 11
 _UNIT_WIDTH = 5
-_SEP = "-" * (3 + _CAT_WIDTH + _NAME_WIDTH + 5 + 1 + _UNIT_WIDTH + 1 + 10)
+_SEP = "-" * (3 + _CAT_WIDTH + 1 + _NAME_WIDTH + 5 + 1 + _UNIT_WIDTH + 1 + 10)
 
 
 def _table_row(idx: int, category: str, name: str, qty: float, unit: str, amount: float) -> str:
@@ -67,7 +58,7 @@ def _table_row(idx: int, category: str, name: str, qty: float, unit: str, amount
     qty_str = f"{qty:g}" if qty else "-"
     display_unit = h(unit)[:_UNIT_WIDTH]
     return (
-        f"{idx:02d} {display_cat:<{_CAT_WIDTH}}{display_name:<{_NAME_WIDTH}}"
+        f"{idx:02d} {display_cat:<{_CAT_WIDTH}} {display_name:<{_NAME_WIDTH}}"
         f"{qty_str:>5} {display_unit:<{_UNIT_WIDTH}}{_fmt_amount(amount):>10}"
     )
 
@@ -75,7 +66,7 @@ def _table_row(idx: int, category: str, name: str, qty: float, unit: str, amount
 def _build_table(items: list[tuple[str, str, float, str, float, str]]) -> list[str]:
     """items: (category, name, qty, unit, amount, type) where type is 'income'/'expense'."""
     header = (
-        f"{'№':<3}{'Kat.':<{_CAT_WIDTH}}{'Nomi':<{_NAME_WIDTH}}"
+        f"{'№':<3}{'Kat.':<{_CAT_WIDTH}} {'Nomi':<{_NAME_WIDTH}}"
         f"{'Miqd':>5} {'Birl':<{_UNIT_WIDTH}}{'Summa':>10}"
     )
     table_lines = [_SEP, header, _SEP]

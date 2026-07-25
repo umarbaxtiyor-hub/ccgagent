@@ -43,9 +43,12 @@ async def handle_receipt_photo(message: Message) -> None:
         parsed_items = await parse_receipt_image(
             image_bytes, "image/jpeg", expense_cats, income_cats, date.today()
         )
-    except Exception:
+    except Exception as e:
         logger.exception("parse_receipt_image failed")
-        await status_msg.edit_text("Kechirasiz, chekni o'qiy olmadim. Iltimos, aniqroq rasm yuboring.")
+        await status_msg.edit_text(
+            "Kechirasiz, chekni o'qiy olmadim. Iltimos, aniqroq rasm yuboring.\n"
+            f"(texnik xato: {type(e).__name__}: {str(e)[:300]})"
+        )
         return
 
     valid_items = [p for p in parsed_items if p.get("confidence") != "low"]

@@ -54,9 +54,12 @@ async def parse_and_save_transactions(
 
     try:
         parsed_items = await parse_expense_text(text, expense_cats, income_cats, date.today())
-    except Exception:
+    except Exception as e:
         logger.exception("parse_expense_text failed for text=%r", text)
-        return "Kechirasiz, xabaringizni tahlil qila olmadim. Iltimos, summani va nima uchunligini aniqroq yozing."
+        return (
+            "Kechirasiz, xabaringizni tahlil qila olmadim. Iltimos, summani va nima uchunligini aniqroq yozing.\n"
+            f"(texnik xato: {type(e).__name__}: {str(e)[:300]})"
+        )
 
     valid_items = [p for p in parsed_items if p.get("confidence") != "low"]
     if not valid_items:

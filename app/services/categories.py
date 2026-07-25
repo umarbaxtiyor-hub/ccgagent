@@ -4,11 +4,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Category, TransactionType
 
 DEFAULT_EXPENSE_CATEGORIES = [
+    "Oziq-ovqat",
     "Qurilish materiallari",
-    "Ish haqi",
-    "Transport",
-    "Jihoz va asboblar",
+    "Texnika va asboblar",
     "Ijara",
+    "Ish haqi",
+    "Usta xizmati",
+    "Transport",
     "Kommunal to'lovlar",
     "Soliq va yig'imlar",
     "Boshqa xarajat",

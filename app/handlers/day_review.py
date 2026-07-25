@@ -32,23 +32,31 @@ def _fmt_amount(amount: float) -> str:
     return f"{amount:,.0f}"
 
 
-_SEP = "-" * 37
-_NAME_WIDTH = 14
+_CAT_WIDTH = 11
+_NAME_WIDTH = 10
+_SEP = "-" * (3 + _CAT_WIDTH + _NAME_WIDTH + 6 + 1 + 10)
 
 
-def _table_row(idx: int, name: str, qty: float, amount: float) -> str:
+def _table_row(idx: int, category: str, name: str, qty: float, amount: float) -> str:
+    display_cat = h(category)[:_CAT_WIDTH]
     display_name = h(name)[:_NAME_WIDTH]
     qty_str = f"({qty:g}x)" if qty else "-"
-    return f"{idx:02d}  {display_name:<{_NAME_WIDTH}}{qty_str:>8}  {_fmt_amount(amount):>10}"
+    return (
+        f"{idx:02d} {display_cat:<{_CAT_WIDTH}}{display_name:<{_NAME_WIDTH}}"
+        f"{qty_str:>6} {_fmt_amount(amount):>10}"
+    )
 
 
-def _build_table(items: list[tuple[str, float, float, str]]) -> list[str]:
-    """items: (name, qty, amount, type) where type is 'income'/'expense'."""
-    table_lines = [_SEP, f"{'№':<4}{'Nomi':<{_NAME_WIDTH}}{'Miqdor':>8}  {'Summa':>10}", _SEP]
+def _build_table(items: list[tuple[str, str, float, float, str]]) -> list[str]:
+    """items: (category, name, qty, amount, type) where type is 'income'/'expense'."""
+    header = (
+        f"{'№':<3}{'Kategoriya':<{_CAT_WIDTH}}{'Nomi':<{_NAME_WIDTH}}{'Miqdor':>6} {'Summa':>10}"
+    )
+    table_lines = [_SEP, header, _SEP]
     total_income = 0.0
     total_expense = 0.0
-    for i, (name, qty, amount, type_) in enumerate(items, start=1):
-        table_lines.append(_table_row(i, name, qty, amount))
+    for i, (category, name, qty, amount, type_) in enumerate(items, start=1):
+        table_lines.append(_table_row(i, category, name, qty, amount))
         if type_ == "income":
             total_income += amount
         else:
@@ -76,7 +84,7 @@ def format_daily_text_report(rows: list[dict], reporter_name: str) -> str:
     sections = []
     for project_name, project_rows in by_project.items():
         items = [
-            (r.get("nomi") or "-", r.get("miqdor") or 0, r["umumiy_summa"], r["_type"])
+            (r.get("kategoriya") or "-", r.get("nomi") or "-", r.get("miqdor") or 0, r["umumiy_summa"], r["_type"])
             for r in sorted(project_rows, key=lambda r: 0 if r["_type"] == "expense" else 1)
         ]
         table = "<pre>" + "\n".join(_build_table(items)) + "</pre>"
@@ -99,7 +107,8 @@ def format_day_review(transactions: list[Transaction]) -> str:
     for project_name, items in by_project.items():
         table_items = [
             (
-                t.description or t.counterparty or (t.category.name if t.category else "-"),
+                t.category.name if t.category else "-",
+                t.description or t.counterparty or "-",
                 float(t.quantity or 0),
                 float(t.amount),
                 t.type.value,

@@ -45,13 +45,21 @@ _TRANSACTION_ITEM_SCHEMA = {
             "type": "STRING",
             "description": (
                 "Miqdor birligi. Iloji boricha shu standart birliklardan birini ishlat: "
-                "'litr', 'kg', 'm2', 'm3', 'dona', 'kun', 'qop', 'tonna'. Agar matnda "
-                "ko'rsatilmagan bo'lsa bo'sh qator."
+                "'litr', 'kg', 'm' (chiziqli metr), 'm2', 'm3', 'dona', 'kun', 'qop', 'tonna'. "
+                "Agar matnda miqdor bor-u lekin birlik so'z bilan aytilmagan bo'lsa ham, xarajat "
+                "nima ekanini tahlil qilib eng mos birlikni o'zing tanla (masalan qurilish "
+                "materiallari - odatda 'dona' yoki 'qop', yoqilg'i/bo'yoq/suyuqlik - 'litr', "
+                "sement/qum kabi ommaviy materiallar - 'qop' yoki 'tonna', ish haqi/xizmat - "
+                "'kun'). Faqat miqdorning o'zi ham noaniq/ko'rsatilmagan bo'lsagina bo'sh qator qo'y."
             ),
         },
         "unit_price": {
             "type": "NUMBER",
-            "description": "Agar matnda birlik narxi alohida ko'rsatilgan bo'lsa shu son (so'mda), aks holda 0",
+            "description": (
+                "Bitta birlik narxi (so'mda). Agar matnda to'g'ridan-to'g'ri aytilgan bo'lsa shuni "
+                "ishlat. Agar aytilmagan bo'lsa-yu, miqdor va umumiy summa ma'lum bo'lsa, "
+                "umumiy summani miqdorga bo'lib hisobla. Miqdorning o'zi noma'lum bo'lsa 0 qo'y."
+            ),
         },
         "payment_type": {
             "type": "STRING",

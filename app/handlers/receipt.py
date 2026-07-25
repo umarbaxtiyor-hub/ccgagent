@@ -8,11 +8,10 @@ from app.access import AllowedUser
 from app.db import async_session
 from app.handlers.common import require_project
 from app.handlers.day_review import format_ack_table
-from app.handlers.keyboards import daftar_reply_keyboard
+from app.handlers.keyboards import ack_choice_keyboard
 from app.models import Transaction, TransactionSource, TransactionType
 from app.services.ai_parser import parse_receipt_image
 from app.services.categories import category_names, get_or_create_category
-from app.services.transactions import count_unconfirmed
 from app.services.users import get_or_create_user
 
 router = Router()
@@ -83,9 +82,8 @@ async def handle_receipt_photo(message: Message) -> None:
         await session.commit()
         project_name = user.current_project.name if user.current_project else "-"
         reporter_name = user.full_name or user.username or "Xodim"
-        count = await count_unconfirmed(session, user.id)
 
     await status_msg.delete()
     await message.answer(
-        format_ack_table(valid_items, project_name, reporter_name), reply_markup=daftar_reply_keyboard(count)
+        format_ack_table(valid_items, project_name, reporter_name), reply_markup=ack_choice_keyboard()
     )

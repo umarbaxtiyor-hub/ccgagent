@@ -37,27 +37,27 @@ _UNIT_WIDTH = 5
 _SEP = "-" * (3 + _NAME_WIDTH + 5 + 1 + _UNIT_WIDTH + 1 + 10)
 
 
-def _table_row(idx: int, category: str, qty: float, unit: str, amount: float) -> str:
-    display_cat = h(category)[:_NAME_WIDTH]
+def _table_row(idx: int, name: str, qty: float, unit: str, amount: float) -> str:
+    display_name = h(name)[:_NAME_WIDTH]
     qty_str = f"{qty:g}" if qty else "-"
     display_unit = h(unit)[:_UNIT_WIDTH]
     return (
-        f"{idx:02d} {display_cat:<{_NAME_WIDTH}}"
+        f"{idx:02d} {display_name:<{_NAME_WIDTH}}"
         f"{qty_str:>5} {display_unit:<{_UNIT_WIDTH}}{_fmt_amount(amount):>10}"
     )
 
 
 def _build_table(items: list[tuple[str, float, str, float, str]]) -> list[str]:
-    """items: (category, qty, unit, amount, type) where type is 'income'/'expense'."""
+    """items: (name, qty, unit, amount, type) where type is 'income'/'expense'."""
     header = (
-        f"{'№':<3}{'Kategoriya':<{_NAME_WIDTH}}"
+        f"{'№':<3}{'Nomi':<{_NAME_WIDTH}}"
         f"{'Miqd':>5} {'Birl':<{_UNIT_WIDTH}}{'Summa':>10}"
     )
     table_lines = [_SEP, header, _SEP]
     total_income = 0.0
     total_expense = 0.0
-    for i, (category, qty, unit, amount, type_) in enumerate(items, start=1):
-        table_lines.append(_table_row(i, category, qty, unit, amount))
+    for i, (name, qty, unit, amount, type_) in enumerate(items, start=1):
+        table_lines.append(_table_row(i, name, qty, unit, amount))
         if type_ == "income":
             total_income += amount
         else:
@@ -96,7 +96,7 @@ def format_daily_text_report(rows: list[dict], reporter_name: str) -> str:
         for sana in sorted(by_date):
             date_rows = sorted(by_date[sana], key=lambda r: 0 if r["_type"] == "expense" else 1)
             items = [
-                (r.get("kategoriya") or "-", r.get("miqdor") or 0, r.get("birlik") or "", r["umumiy_summa"], r["_type"])
+                (r.get("nomi") or r.get("kategoriya") or "-", r.get("miqdor") or 0, r.get("birlik") or "", r["umumiy_summa"], r["_type"])
                 for r in date_rows
             ]
             date_str = date.fromisoformat(sana).strftime("%d.%m.%Y")
@@ -127,7 +127,7 @@ def format_day_review(transactions: list[Transaction]) -> str:
         for occurred_on in sorted(by_date):
             table_items = [
                 (
-                    t.category.name if t.category else "-",
+                    t.description or t.counterparty or (t.category.name if t.category else "-"),
                     float(t.quantity or 0),
                     t.unit or "",
                     float(t.amount),
@@ -146,7 +146,13 @@ def format_ack_table(items: list[dict], project_name: str, reporter_name: str) -
     """Same receipt-style table, shown immediately after a message is parsed
     - so the acknowledgement and the Daftar view always look identical."""
     table_items = [
-        (p["category"], float(p.get("quantity") or 0), p.get("unit") or "", float(p["amount"]), p["type"])
+        (
+            p.get("description") or p["category"],
+            float(p.get("quantity") or 0),
+            p.get("unit") or "",
+            float(p["amount"]),
+            p["type"],
+        )
         for p in items
     ]
     today_str = date.today().strftime("%d.%m.%Y")
@@ -198,6 +204,25 @@ async def open_daftar_button(message: Message) -> None:
             session, message.from_user.id, message.from_user.full_name, message.from_user.username or ""
         )
     await message.answer(text, reply_markup=markup)
+
+
+@router.callback_query(F.data == "ack_goto_daftar")
+async def ack_goto_daftar(callback: CallbackQuery) -> None:
+    async with async_session() as session:
+        text, markup = await _open_daftar(
+            session, callback.from_user.id, callback.from_user.full_name, callback.from_user.username or ""
+        )
+    await callback.message.answer(text, reply_markup=markup)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "ack_edit_hint")
+async def ack_edit_hint(callback: CallbackQuery) -> None:
+    await callback.answer(
+        "Xabaringizni to'g'irlash uchun: o'zingiz yozgan xabar ustiga bosib turing va "
+        "\"Tahrirlash\"/\"Edit\"ni tanlang, kerakli joyini o'zgartirib qayta yuboring.",
+        show_alert=True,
+    )
 
 
 @router.callback_query(F.data == "day_list")
@@ -338,6 +363,8 @@ async def confirm_all(callback: CallbackQuery) -> None:
         occurred_dates = []
         for t in transactions:
             t.confirmed = True
+            if t.quantity and not t.unit_price:
+                t.unit_price = float(t.amount) / float(t.quantity)
             occurred_dates.append(t.occurred_on)
             rows.append(
                 {

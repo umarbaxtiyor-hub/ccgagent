@@ -52,6 +52,17 @@ def report_period_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+def ack_choice_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="📒 Daftarga", callback_data="ack_goto_daftar"),
+                InlineKeyboardButton(text="✏️ Tahrirlash", callback_data="ack_edit_hint"),
+            ]
+        ]
+    )
+
+
 def daftar_reply_keyboard(count: int) -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text=f"📒 Daftar ({count})")]],

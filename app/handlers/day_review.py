@@ -4,6 +4,7 @@ from datetime import date
 from html import escape as h
 
 from aiogram import F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 from sqlalchemy import select
@@ -140,23 +141,31 @@ def format_day_review(transactions: list[Transaction]) -> str:
     return "\n\n".join(sections)
 
 
-def format_ack_table(items: list[dict], project_name: str, reporter_name: str) -> str:
-    """Same receipt-style table, shown immediately after a message is parsed
-    - so the acknowledgement and the Daftar view always look identical."""
-    table_items = [
-        (
-            p.get("description") or p["category"],
-            float(p.get("quantity") or 0),
-            p.get("unit") or "",
-            float(p["amount"]),
-            p["type"],
-        )
-        for p in items
-    ]
-    today_str = date.today().strftime("%d.%m.%Y")
-    block = _date_block(today_str, table_items)
-    header = _project_header(project_name, reporter_name)
-    return f"✅ Qabul qilindi (tasdiqlash kutilmoqda)\n\n{header}\n\n{block}"
+def format_ack_table(items: list[dict], project_name: str, reporter_name: str, editable: bool = False) -> str:
+    """Short plain acknowledgement shown right after a message is parsed.
+    Deliberately NOT the heavy receipt-style table - that design made users
+    think this bot message itself was what they should long-press to edit,
+    which doesn't work (Telegram only lets you edit your own messages).
+    Reviewing, editing and confirming all happen from /daftar instead."""
+    lines = []
+    total = 0.0
+    for p in items:
+        name = h(p.get("description") or p["category"])
+        amount = float(p["amount"])
+        sign = "-" if p["type"] == "expense" else "+"
+        total += -amount if p["type"] == "expense" else amount
+        lines.append(f"• {name} — {sign}{_fmt_amount(amount)} so'm")
+    total_line = f"Jami: {_fmt_amount(total)} so'm"
+    hint = (
+        "To'g'irlash uchun shu xabaringizni tahrirlang (uzoq bosib \"Edit\"), yoki 📒 Daftar orqali."
+        if editable
+        else "Ko'rish, to'g'irlash va tasdiqlash uchun 📒 Daftar."
+    )
+    return (
+        "✅ Qabul qilindi (tasdiqlash kutilmoqda)\n\n"
+        + "\n".join(lines)
+        + f"\n\n{total_line}\n\n{hint}"
+    )
 
 
 async def _unconfirmed_for_user(session: AsyncSession, user_id: int) -> list[Transaction]:
@@ -230,14 +239,18 @@ async def day_edit_hint(callback: CallbackQuery) -> None:
     await callback.answer(_EDIT_HINT, show_alert=True)
 
 
-@router.callback_query(F.data == "day_list")
+@router.callback_query(F.data.in_({"day_list", "day_refresh"}))
 async def show_day_list(callback: CallbackQuery) -> None:
     async with async_session() as session:
         text, markup = await _open_daftar(
             session, callback.from_user.id, callback.from_user.full_name, callback.from_user.username or ""
         )
-    await callback.message.edit_text(text, reply_markup=markup)
-    await callback.answer()
+    try:
+        await callback.message.edit_text(text, reply_markup=markup)
+    except TelegramBadRequest as e:
+        if "message is not modified" not in str(e):
+            raise
+    await callback.answer("Yangilandi" if callback.data == "day_refresh" else None)
 
 
 @router.callback_query(F.data == "day_delete_prompt")

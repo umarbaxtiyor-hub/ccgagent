@@ -54,12 +54,7 @@ def report_period_keyboard() -> InlineKeyboardMarkup:
 
 def ack_choice_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="📒 Daftarga", callback_data="ack_goto_daftar"),
-                InlineKeyboardButton(text="✏️ Tahrirlash", callback_data="ack_edit_hint"),
-            ]
-        ]
+        inline_keyboard=[[InlineKeyboardButton(text="📒 Daftarni ochish", callback_data="ack_goto_daftar")]]
     )
 
 
@@ -73,6 +68,7 @@ def daftar_reply_keyboard(count: int) -> ReplyKeyboardMarkup:
 def day_review_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
+            [InlineKeyboardButton(text="🔄 Yangilash", callback_data="day_refresh")],
             [
                 InlineKeyboardButton(text="✏️ Tahrirlash", callback_data="day_edit_hint"),
                 InlineKeyboardButton(text="🗑 O'chirish", callback_data="day_delete_prompt"),

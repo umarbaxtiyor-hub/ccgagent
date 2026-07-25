@@ -8,7 +8,10 @@ _GROQ_TRANSCRIBE_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
 async def transcribe_voice(audio_bytes: bytes) -> str:
     form = aiohttp.FormData()
     form.add_field("file", audio_bytes, filename="voice.ogg", content_type="audio/ogg")
-    form.add_field("model", "whisper-large-v3-turbo")
+    # The "turbo" variant trades multilingual accuracy for speed (fewer
+    # decoder layers), which hurts lower-resource languages like Uzbek
+    # noticeably more than English - use the full model instead.
+    form.add_field("model", "whisper-large-v3")
     form.add_field("language", "uz")
 
     async with aiohttp.ClientSession() as session:

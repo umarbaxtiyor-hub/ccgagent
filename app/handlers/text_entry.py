@@ -51,7 +51,7 @@ async def handle_text_entry(message: Message) -> None:
         reporter_name = user.full_name or user.username or "Xodim"
 
     ack = await message.answer(
-        format_ack_table(items, project_name, reporter_name), reply_markup=ack_choice_keyboard()
+        format_ack_table(items, project_name, reporter_name, editable=True), reply_markup=ack_choice_keyboard()
     )
 
     async with async_session() as session:
@@ -119,7 +119,7 @@ async def handle_text_edit(message: Message) -> None:
         await message.bot.edit_message_text(
             chat_id=message.chat.id,
             message_id=ack_message_id,
-            text=format_ack_table(items, project_name, reporter_name),
+            text=format_ack_table(items, project_name, reporter_name, editable=True),
             reply_markup=ack_choice_keyboard(),
         )
     except Exception:

@@ -150,9 +150,8 @@ async def edit_prompt(callback: CallbackQuery) -> None:
         await callback.answer("Tasdiqlanmagan yozuvlar yo'q.", show_alert=True)
         return
 
-    await callback.message.edit_text(
-        "Qaysi raqamli yozuvni tahrirlaysiz?", reply_markup=day_row_picker_keyboard(transactions, "edit")
-    )
+    text = format_day_review(transactions) + "\n\n<b>O'zgartiriladigan yozuv raqamini tanlang.</b>"
+    await callback.message.edit_text(text, reply_markup=day_row_picker_keyboard(transactions, "edit"))
     await callback.answer()
 
 
@@ -171,9 +170,8 @@ async def delete_prompt(callback: CallbackQuery) -> None:
         await callback.answer("Tasdiqlanmagan yozuvlar yo'q.", show_alert=True)
         return
 
-    await callback.message.edit_text(
-        "Qaysi raqamli yozuvni o'chirasiz?", reply_markup=day_row_picker_keyboard(transactions, "del")
-    )
+    text = format_day_review(transactions) + "\n\n<b>O'chiriladigan yozuv raqamini tanlang.</b>"
+    await callback.message.edit_text(text, reply_markup=day_row_picker_keyboard(transactions, "del"))
     await callback.answer()
 
 

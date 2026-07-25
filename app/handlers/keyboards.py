@@ -80,12 +80,14 @@ def format_day_review(transactions: list[Transaction]) -> str:
     lines = [f"📒 <b>Daftar</b> ({len(transactions)} ta yozuv):\n"]
 
     for i, t in enumerate(transactions, start=1):
-        type_label = "Kirim" if t.type.value == "income" else "Chiqim"
+        emoji = "💰" if t.type.value == "income" else "💸"
         amount = float(t.amount)
         amount_str = f"{amount:,.0f}".replace(",", " ")
-        line = f"{i}. {t.occurred_on.isoformat()} - {type_label}: {amount_str} so'm"
+        category_name = t.category.name if t.category else "Kategoriyasiz"
+        line = f"{i}. {emoji} {category_name}"
         if t.description:
-            line += f" - {t.description}"
+            line += f" — {t.description}"
+        line += f" — {amount_str} so'm"
         lines.append(line)
 
     total_expense = sum(float(t.amount) for t in transactions if t.type.value == "expense")

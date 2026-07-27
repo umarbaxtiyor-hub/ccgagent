@@ -1,4 +1,5 @@
 import logging
+from html import escape as h
 
 from aiogram import F, Router
 from aiogram.filters import Command
@@ -28,7 +29,7 @@ async def cmd_loyiha(message: Message) -> None:
     if message.from_user.id not in settings.admin_user_id_set:
         if user.current_project:
             await message.answer(
-                f"Sizning joriy loyihangiz: <b>{user.current_project.name}</b>. O'zgartirish kerak "
+                f"Sizning joriy loyihangiz: <b>{h(user.current_project.name)}</b>. O'zgartirish kerak "
                 "bo'lsa, administratorga murojaat qiling."
             )
         else:
@@ -42,7 +43,7 @@ async def cmd_loyiha(message: Message) -> None:
         projects = await list_projects(session)
     if not projects:
         await message.answer(
-            "Hali birorta loyiha qo'shilmagan. /loyiha_yarat <nomi> buyrug'i bilan qo'shing."
+            "Hali birorta loyiha qo'shilmagan. /loyiha_yarat &lt;nomi&gt; buyrug'i bilan qo'shing."
         )
         return
     await message.answer("Loyihani tanlang:", reply_markup=project_list_keyboard(projects))
@@ -65,7 +66,7 @@ async def cmd_loyiha_yarat(message: Message) -> None:
         )
         await set_user_current_project(session, user.id, project.id)
 
-    await message.answer(f"✅ \"{project.name}\" loyihasi qo'shildi va joriy loyiha sifatida tanlandi.")
+    await message.answer(f"✅ \"{h(project.name)}\" loyihasi qo'shildi va joriy loyiha sifatida tanlandi.")
 
 
 @router.message(Command("loyiha_biriktir"), AllowedUser(), AdminUser())
@@ -88,13 +89,13 @@ async def cmd_loyiha_biriktir(message: Message) -> None:
         employee.is_approved = True
         await set_user_current_project(session, employee.id, project.id)
 
-    await message.answer(f"✅ Xodim (ID: {employee_id}) \"{project.name}\" loyihasiga biriktirildi.")
+    await message.answer(f"✅ Xodim (ID: {employee_id}) \"{h(project.name)}\" loyihasiga biriktirildi.")
 
     try:
         await message.bot.send_message(
             chat_id=employee_id,
             text=(
-                f"📌 Sizga <b>{project.name}</b> loyihasi biriktirildi. Endi yuboradigan barcha "
+                f"📌 Sizga <b>{h(project.name)}</b> loyihasi biriktirildi. Endi yuboradigan barcha "
                 "xabarlaringiz shu loyihaga tegishli bo'ladi."
             ),
         )
@@ -119,7 +120,7 @@ async def assign_new_user(callback: CallbackQuery) -> None:
         projects = await list_projects(session)
         project = next((p for p in projects if p.id == project_id), None)
 
-    project_name = project.name if project else project_id
+    project_name = h(project.name) if project else str(project_id)
     await callback.message.edit_text(
         f"✅ Xodim (ID: {employee_id}) \"{project_name}\" loyihasiga biriktirildi.", reply_markup=None
     )
@@ -182,7 +183,7 @@ async def select_project(callback: CallbackQuery) -> None:
         projects = await list_projects(session)
         project = next((p for p in projects if p.id == project_id), None)
 
-    project_name = project.name if project else project_id
+    project_name = h(project.name) if project else str(project_id)
     await callback.message.edit_text(
         f"✅ Joriy loyiha: <b>{project_name}</b>. Endi shu loyiha uchun yozishingiz mumkin.",
         reply_markup=None,

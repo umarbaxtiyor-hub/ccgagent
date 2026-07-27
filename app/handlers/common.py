@@ -28,7 +28,7 @@ async def require_project(session: AsyncSession, message: Message, user: User) -
     projects = await list_projects(session)
     if not projects:
         await message.answer(
-            "Hali birorta loyiha (obyekt) qo'shilmagan. Iltimos, /loyiha_yarat <nomi> buyrug'i "
+            "Hali birorta loyiha (obyekt) qo'shilmagan. Iltimos, /loyiha_yarat &lt;nomi&gt; buyrug'i "
             "bilan birinchi loyihani qo'shing."
         )
         return False

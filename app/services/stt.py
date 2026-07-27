@@ -19,6 +19,10 @@ async def transcribe_voice(audio_bytes: bytes) -> str:
             _GROQ_TRANSCRIBE_URL,
             data=form,
             headers={"Authorization": f"Bearer {settings.groq_api_key}"},
+            # Groq's Whisper inference runs many times faster than real-time,
+            # so 180s is generous headroom even for a long voice message -
+            # set explicitly instead of relying on aiohttp's implicit default.
+            timeout=aiohttp.ClientTimeout(total=180),
         ) as resp:
             if resp.status != 200:
                 text = await resp.text()

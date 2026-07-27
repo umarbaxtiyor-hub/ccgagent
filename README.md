@@ -57,7 +57,7 @@ Telegram bot orqali kunlik xarajatlar va bank hisobidan o'tadigan pullarni
 - **Avtomatik kunlik hisobot guruhga (ixtiyoriy)**: `REPORT_RECIPIENT_ID`
   sozlansa (shaxsiy Telegram ID yoki bir guruh chat ID'si - guruhning ID'sini
   botni guruhga qo'shib, shu yerda `/guruh_id` yozib bilib olasiz), har kuni
-  soat **`DIGEST_HOUR`:`DIGEST_MINUTE` (Toshkent vaqti, standart 20:00)** da
+  soat **`DIGEST_HOUR`:`DIGEST_MINUTE` (Toshkent vaqti, standart 19:00)** da
   o'sha kuni tasdiqlangan yozuvlar bo'yicha **har bir loyiha uchun alohida
   xabar**, so'ngida esa barcha loyihalar bo'yicha **umumiy xulosa** xabari
   avtomatik yuboriladi (agar o'sha kuni hech narsa tasdiqlanmagan bo'lsa,

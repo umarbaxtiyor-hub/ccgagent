@@ -8,7 +8,9 @@ from app.access import AllowedUser
 from app.db import async_session
 from app.handlers.common import parse_and_save_transactions, require_project
 from app.handlers.day_review import format_ack_table
+from app.handlers.keyboards import daftar_reply_keyboard
 from app.models import Transaction, TransactionSource
+from app.services.transactions import count_unconfirmed
 from app.services.users import get_or_create_user
 
 router = Router()
@@ -57,11 +59,20 @@ async def handle_text_entry(message: Message) -> None:
         reporter_name = user.full_name or user.username or "Xodim"
 
     await status_msg.delete()
-    ack = await message.answer(format_ack_table(items, project_name, reporter_name))
 
     async with async_session() as session:
         result = await session.execute(select(Transaction).where(Transaction.id.in_(tx_ids)))
-        for tx in result.scalars().all():
+        txs = result.scalars().all()
+        # The persistent "Daftar (N)" reply-keyboard button only updates
+        # when a message is sent with a fresh ReplyKeyboardMarkup - without
+        # this, it kept showing whatever count it had before this message,
+        # even though the new items were already saved as unconfirmed.
+        count = await count_unconfirmed(session, user.id)
+        ack = await message.answer(
+            format_ack_table(items, project_name, reporter_name),
+            reply_markup=daftar_reply_keyboard(count),
+        )
+        for tx in txs:
             tx.ack_message_id = ack.message_id
         await session.commit()
 

@@ -20,6 +20,7 @@ from app.handlers.keyboards import (
     day_review_keyboard,
     day_row_picker_keyboard,
 )
+from app.handlers.start import cmd_start
 from app.models import Transaction, TransactionType
 from app.services.ai_parser import parse_daftar_edit
 from app.services.categories import category_names, get_or_create_category
@@ -275,26 +276,10 @@ async def open_daftar_button(message: Message) -> None:
 
 @router.message(F.chat.type == "private", F.text == "🔄 Yangilash", AllowedUser())
 async def refresh_main_menu(message: Message) -> None:
-    """A general refresh: updates the unconfirmed-count on the persistent
-    Daftar button (reply keyboards can't update their own label otherwise)
-    and shows the full up-to-date Daftar content, not just a count."""
-    async with async_session() as session:
-        user = await get_or_create_user(
-            session,
-            telegram_id=message.from_user.id,
-            full_name=message.from_user.full_name,
-            username=message.from_user.username or "",
-        )
-        transactions = await _unconfirmed_for_user(session, user.id)
-        count = len(transactions)
-        if transactions:
-            text = format_day_review(transactions)
-            markup = day_review_keyboard()
-        else:
-            text, markup = "Tasdiqlanmagan yozuvlar yo'q.", None
-
-    await message.answer(f"🔄 Yangilandi ({count} ta yozuv)", reply_markup=daftar_reply_keyboard(count))
-    await message.answer(text, reply_markup=markup)
+    """"Yangilash" does exactly what /start does - re-greets, refreshes the
+    persistent Daftar count, and re-notifies admins if project assignment
+    is still pending - rather than a separate, narrower refresh flow."""
+    await cmd_start(message)
 
 
 @router.callback_query(F.data == "day_edit_hint")

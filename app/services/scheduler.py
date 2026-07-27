@@ -18,8 +18,13 @@ logger = logging.getLogger(__name__)
 # so a plain fixed-offset timezone is simpler and more robust here than
 # depending on a system/tzdata "Asia/Tashkent" zoneinfo entry being present.
 _TASHKENT = timezone(timedelta(hours=5))
-_DIGEST_HOUR = 20
-_REMINDER_HOUR, _REMINDER_MINUTE = 19, 30
+
+
+def _reminder_time() -> tuple[int, int]:
+    """30 minutes before the configured digest time, wrapping correctly
+    even if the digest is set close to midnight."""
+    total_minutes = (settings.digest_hour * 60 + settings.digest_minute - 30) % (24 * 60)
+    return total_minutes // 60, total_minutes % 60
 
 
 async def _confirmed_rows_for_date(target_date) -> list[dict]:
@@ -93,7 +98,8 @@ async def run_daftar_reminder(bot: Bot) -> None:
         return
 
     while True:
-        target = await _sleep_until(_REMINDER_HOUR, _REMINDER_MINUTE)
+        reminder_hour, reminder_minute = _reminder_time()
+        target = await _sleep_until(reminder_hour, reminder_minute)
         try:
             pending = await _pending_users_for_date(target.date())
             for p in pending:
@@ -102,8 +108,9 @@ async def run_daftar_reminder(bot: Bot) -> None:
                         chat_id=p["telegram_id"],
                         text=(
                             f"⏰ Eslatma: bugungi Daftaringizda {p['count']} ta tasdiqlanmagan yozuv bor. "
-                            "Soat 20:00'da kunlik hisobot tuzilganda tasdiqlanmagan yozuvlar unga "
-                            "kirmaydi - iltimos 📒 Daftar orqali ko'rib, tasdiqlab qo'ying."
+                            f"Soat {settings.digest_hour:02d}:{settings.digest_minute:02d}'da kunlik "
+                            "hisobot tuzilganda tasdiqlanmagan yozuvlar unga kirmaydi - iltimos 📒 Daftar "
+                            "orqali ko'rib, tasdiqlab qo'ying."
                         ),
                     )
                 except Exception:
@@ -114,7 +121,8 @@ async def run_daftar_reminder(bot: Bot) -> None:
 
 async def run_daily_ceo_digest(bot: Bot) -> None:
     """Runs forever, sending a report to REPORT_RECIPIENT_ID (a personal
-    chat or a group) every day at 20:00 Tashkent time, covering that day's
+    chat or a group) every day at DIGEST_HOUR:DIGEST_MINUTE Tashkent time
+    (configurable via env vars, default 20:00), covering that day's
     confirmed transactions across all employees/projects - replaces the old
     behavior of pinging the recipient separately every time an employee
     confirmed. Sends one message per project, a final summary message, and
@@ -124,7 +132,7 @@ async def run_daily_ceo_digest(bot: Bot) -> None:
         return
 
     while True:
-        target = await _sleep_until(_DIGEST_HOUR, 0)
+        target = await _sleep_until(settings.digest_hour, settings.digest_minute)
         try:
             recipient_id = int(settings.report_recipient_id)
             rows = await _confirmed_rows_for_date(target.date())

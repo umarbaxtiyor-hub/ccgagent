@@ -57,16 +57,19 @@ Telegram bot orqali kunlik xarajatlar va bank hisobidan o'tadigan pullarni
 - **Avtomatik kunlik hisobot guruhga (ixtiyoriy)**: `REPORT_RECIPIENT_ID`
   sozlansa (shaxsiy Telegram ID yoki bir guruh chat ID'si - guruhning ID'sini
   botni guruhga qo'shib, shu yerda `/guruh_id` yozib bilib olasiz), har kuni
-  soat **20:00 (Toshkent vaqti)** da o'sha kuni tasdiqlangan yozuvlar bo'yicha
-  **har bir loyiha uchun alohida xabar**, so'ngida esa barcha loyihalar
-  bo'yicha **umumiy xulosa** xabari avtomatik yuboriladi (agar o'sha kuni
-  hech narsa tasdiqlanmagan bo'lsa, hech narsa yuborilmaydi). Xodimlar kun
-  davomida `/daftar`dan tasdiqlaganda alohida xabar ketmaydi - hammasi
-  kechqurungi hisobotga jamlanadi. Hisobot faqat **tasdiqlangan** yozuvlarni
-  o'z ichiga oladi, shuning uchun:
-  - Soat **19:30**da, agar xodimning o'sha kunga tasdiqlanmagan yozuvi bo'lsa,
-    unga shaxsiy eslatma xabari boradi ("Daftaringizni tasdiqlashni unutmang").
-  - Soat 20:00'dagi hisobotning oxirida, agar hali ham kimningdir
+  soat **`DIGEST_HOUR`:`DIGEST_MINUTE` (Toshkent vaqti, standart 20:00)** da
+  o'sha kuni tasdiqlangan yozuvlar bo'yicha **har bir loyiha uchun alohida
+  xabar**, so'ngida esa barcha loyihalar bo'yicha **umumiy xulosa** xabari
+  avtomatik yuboriladi (agar o'sha kuni hech narsa tasdiqlanmagan bo'lsa,
+  hech narsa yuborilmaydi). Sinash uchun `DIGEST_HOUR`/`DIGEST_MINUTE`ni
+  yaqin vaqtga o'rnatib ko'rish mumkin, keyin real jadvalga qaytaring.
+  Xodimlar kun davomida `/daftar`dan tasdiqlaganda alohida xabar ketmaydi -
+  hammasi kechqurungi hisobotga jamlanadi. Hisobot faqat **tasdiqlangan**
+  yozuvlarni o'z ichiga oladi, shuning uchun:
+  - Hisobotdan 30 daqiqa oldin, agar xodimning o'sha kunga tasdiqlanmagan
+    yozuvi bo'lsa, unga shaxsiy eslatma xabari boradi ("Daftaringizni
+    tasdiqlashni unutmang").
+  - Hisobotning oxirida, agar hali ham kimningdir
     tasdiqlanmagan yozuvi qolgan bo'lsa, guruhga "⚠️ Hali tasdiqlanmagan"
     degan qo'shimcha xabar ham boradi - kim va qaysi loyiha bo'yicha
     hisobot to'liq emasligini ko'rsatadi.

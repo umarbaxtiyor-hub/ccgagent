@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     sheets_webhook_url: str = ""
     sheets_webhook_secret: str = ""
     report_recipient_id: str = ""
+    # Tashkent time (UTC+5). Configurable via env var so the daily digest
+    # time can be tested/adjusted without a code change - e.g. set
+    # DIGEST_HOUR=17, DIGEST_MINUTE=15 in Railway to fire a test run soon.
+    digest_hour: int = 20
+    digest_minute: int = 0
 
     @field_validator("database_url")
     @classmethod

@@ -458,6 +458,15 @@ async def confirm_all(callback: CallbackQuery) -> None:
             rows.append(transaction_to_row(t))
         await session.commit()
 
+    # Telegram callback queries expire after a short window - acknowledge
+    # it right away instead of after the (potentially slow, one-request-
+    # per-row) Sheets sync below, which used to make this fail with
+    # "query is too old" once there were more than a few rows to confirm.
+    # Rows are still synced one at a time (not concurrently): the Apps
+    # Script endpoint appends rows without a lock, so parallel requests
+    # could race and clobber each other's row.
+    await callback.answer("Tasdiqlandi")
+
     for row in rows:
         sheet_row = {k: v for k, v in row.items() if k != "_type"}
         await append_transaction_row(sheet_row)
@@ -465,7 +474,6 @@ async def confirm_all(callback: CallbackQuery) -> None:
     await callback.message.edit_text(
         f"✅ {len(rows)} ta yozuv tasdiqlandi va Google Sheetga yuborildi.", reply_markup=None
     )
-    await callback.answer("Tasdiqlandi")
     await callback.message.answer("📒 Daftar bo'sh.", reply_markup=daftar_reply_keyboard(0))
 
 

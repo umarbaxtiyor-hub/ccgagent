@@ -75,8 +75,8 @@ def day_review_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="🗑 O'chirish", callback_data="day_delete_prompt"),
             ],
             [
-                InlineKeyboardButton(text="✅ Hammasini tasdiqlash", callback_data="day_confirm_all"),
-                InlineKeyboardButton(text="❌ Bekor qilish", callback_data="day_cancel_all"),
+                InlineKeyboardButton(text="✅ Tasdiqlash", callback_data="day_confirm_all"),
+                InlineKeyboardButton(text="❌ Bekor", callback_data="day_cancel_all"),
             ],
         ]
     )

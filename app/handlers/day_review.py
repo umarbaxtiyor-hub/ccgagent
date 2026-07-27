@@ -71,10 +71,10 @@ def _build_table(items: list[tuple[str, float, str, float, str]]) -> list[str]:
         else:
             total_expense += amount
     table_lines.append(_SEP)
-    table_lines.append(f"{'Jami kirim:':<27}{_fmt_amount(total_income):>{_AMOUNT_WIDTH}} UZS")
-    table_lines.append(f"{'JAMI CHIQIM:':<27}{_fmt_amount(total_expense):>{_AMOUNT_WIDTH}} UZS")
+    table_lines.append(f"{'Jami kirim:':<27}{_fmt_amount(total_income):>{_AMOUNT_WIDTH}}")
+    table_lines.append(f"{'JAMI CHIQIM:':<27}{_fmt_amount(total_expense):>{_AMOUNT_WIDTH}}")
     table_lines.append(_SEP)
-    table_lines.append(f"{'BALANS:':<27}{_fmt_amount(total_income - total_expense):>{_AMOUNT_WIDTH}} UZS")
+    table_lines.append(f"{'BALANS:':<27}{_fmt_amount(total_income - total_expense):>{_AMOUNT_WIDTH}}")
     return table_lines
 
 
@@ -247,8 +247,7 @@ async def _render_day_list(session: AsyncSession, user_id: int) -> tuple[str, In
     transactions = await _unconfirmed_for_user(session, user_id)
     if not transactions:
         return "Tasdiqlanmagan yozuvlar yo'q.", None
-    text = format_day_review(transactions) + "\n\nTahrirlash yoki o'chirish uchun tugmani bosing."
-    return text, day_review_keyboard()
+    return format_day_review(transactions), day_review_keyboard()
 
 
 async def _open_daftar(session: AsyncSession, telegram_id: int, full_name: str, username: str) -> tuple:
@@ -289,7 +288,7 @@ async def refresh_main_menu(message: Message) -> None:
         transactions = await _unconfirmed_for_user(session, user.id)
         count = len(transactions)
         if transactions:
-            text = format_day_review(transactions) + "\n\nTahrirlash yoki o'chirish uchun tugmani bosing."
+            text = format_day_review(transactions)
             markup = day_review_keyboard()
         else:
             text, markup = "Tasdiqlanmagan yozuvlar yo'q.", None

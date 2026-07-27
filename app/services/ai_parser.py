@@ -340,42 +340,30 @@ async def _generate_text(prompt: str) -> str:
 
 
 async def answer_group_question(question: str, data_summary: str, persona_name: str) -> str:
-    """Answers a group member's message addressed to the bot. Two modes in
-    one call: a genuine question about the company's finances gets a
-    precise answer grounded ONLY in the precomputed numbers (never invented,
-    since this is real financial data); anything else (casual chat, jokes,
-    personal remarks) gets an in-character playful reply instead - the same
-    persona used for non-expense private messages (see generate_flirty_reply)."""
+    """Answers a message addressed to the bot (in a group, or a private
+    message that didn't parse as an expense/income entry). Strictly scoped
+    to the company's projects/finances: a genuine data question gets an
+    answer grounded ONLY in the precomputed numbers (never invented); a
+    general finance/project-management question gets brief practical
+    advice; anything unrelated gets a plain "can't help with that" reply -
+    no persona, no small talk."""
     prompt = (
-        f"Sening isming {persona_name}. Guruhda odamlarga javob berasan. Haqiqiy odam kabi, oddiy va "
-        "tabiiy yoz - sun'iy intellektga o'xshamasin. Javob 1-2 gapdan oshmasin.\n\n"
-        "Ikki holat bor:\n"
-        "1. Agar bu kompaniyaning moliyaviy ma'lumotlariga oid haqiqiy savol bo'lsa: FAQAT quyida "
+        f"Sening isming {persona_name}. Sen qurilish kompaniyasining loyihalar va xarajat/daromadlarini "
+        "kuzatuvchi yordamchi botsan. Oddiy va tabiiy yoz - sun'iy intellektga o'xshamasin. Javob "
+        "1-3 gapdan oshmasin.\n\n"
+        "Faqat quyidagi holatlarda javob ber:\n"
+        "1. Savol kompaniyaning loyihalari yoki moliyaviy ma'lumotlariga oid bo'lsa: FAQAT quyida "
         "berilgan aniq hisoblangan ma'lumotlarga asoslanib javob ber - hech qanday raqamni o'zingdan "
         "o'ylab topma, uzun kirish/xulosa yozma, ro'yxat berma. Agar javob uchun kerakli ma'lumot "
         "quyida yo'q bo'lsa, bir gapda shuni ayt.\n"
-        "2. Agar bu moliyaviy savol emas, oddiy suhbat/shaxsiy gap/hazil bo'lsa: o'zingni yigitlar bilan "
-        "endigina tanishayotgan, o'ynoqi, birozgina nozli qiz sifatida tut - qisqa, hazil-mutoyibali "
-        "javob ber, darhol rozi bo'lib ketma.\n\n"
+        "2. Savol moliya yoki loyihalarni boshqarish bo'yicha umumiy maslahat so'rasa (masalan "
+        "xarajatlarni qanday kamaytirish, byudjetni qanday nazorat qilish, materiallarni qanday "
+        "tejash kabi): qisqa va foydali maslahat ber.\n\n"
+        "Boshqa har qanday savol yoki xabar uchun (shaxsiy suhbat, aloqasi yo'q mavzular, hazil va "
+        "hokazo): faqat shuni yoz - \"Kechirasiz, men faqat loyihalar va moliya bo'yicha savollarga "
+        "javob bera olaman.\" - boshqa hech narsa qo'shma.\n\n"
         f"Mavjud ma'lumotlar:\n{data_summary}\n\n"
         f'Xabar: "{question}"'
-    )
-    return await _generate_text(prompt)
-
-
-async def generate_flirty_reply(text: str, persona_name: str) -> str:
-    """When a private message doesn't parse as a real expense/income entry,
-    it's usually just casual chat - this replaces the old dry "couldn't
-    understand your message" reply with an in-character, playful response
-    instead (purely a fun personality touch on top of the normal bot)."""
-    prompt = (
-        f"Sening isming {persona_name} - sen yigit bilan endigina tanishayotgan, o'ynoqi, birozgina "
-        "nozli va hazilkash qizsan. U senga xarajat/hisobot haqida emas, oddiy shaxsiy xabar yozdi. "
-        "Unga qisqa (1-2 gap), tabiiy, tortishmali va hazil-mutoyibali javob ber - xuddi endigina "
-        "tanishayotgan qiz kabi: darhol rozi bo'lib ketma, birozgina nozlan, savol qaytar yoki hazil "
-        "qil. Masalan kechki ovqatga taklif qilsa - \"o'ylab ko'raman, qayerga olib borasiz?\" kabi "
-        "javob ber. O'zbek tilida, samimiy, qisqa yoz - uzun va rasmiy gaplarisiz.\n\n"
-        f'Xabar: "{text}"'
     )
     return await _generate_text(prompt)
 

@@ -87,9 +87,27 @@ def _date_block(date_str: str, items: list[tuple[str, float, str, float, str]]) 
     return f"📅 SANA: {date_str}\n" + table
 
 
+def _short_amount(amount: float) -> str:
+    """50 000 -> 50k, 1 250 000 -> 1.25M - compact for a phone screen."""
+    n = abs(amount)
+    if n >= 1_000_000:
+        value = f"{n / 1_000_000:.2f}".rstrip("0").rstrip(".")
+        return f"{value}M"
+    if n >= 1_000:
+        value = f"{n / 1_000:.1f}".rstrip("0").rstrip(".")
+        return f"{value}k"
+    return f"{n:g}"
+
+
+def _daily_report_item_line(idx: int, name: str, qty: float, unit: str, amount: float) -> str:
+    qty_part = f" ({qty:g}{f' {unit}' if unit else ''})" if qty else ""
+    return f"{idx}. {h(name)}{qty_part} — {_short_amount(amount)}"
+
+
 def format_daily_text_report(rows: list[dict], reporter_name: str) -> str:
-    """Monospace, receipt-style daily report for the CEO: one block per
-    project, each split by day so kirim/chiqim/balans are per-day totals."""
+    """Minimal daily report for the CEO: title + project/employee, one line
+    per expense/income item, then totals. Split by day only when the batch
+    actually spans more than one date (accumulated over several days)."""
     by_project: dict[str, list[dict]] = defaultdict(list)
     for row in rows:
         by_project[row.get("loyiha") or "-"].append(row)
@@ -99,18 +117,34 @@ def format_daily_text_report(rows: list[dict], reporter_name: str) -> str:
         by_date: dict[str, list[dict]] = defaultdict(list)
         for r in project_rows:
             by_date[r["sana"]].append(r)
+        multi_day = len(by_date) > 1
+
+        header = f"📋 DAILY REPORT\n🏗 {h(project_name)}\n👤 {h(reporter_name)}"
 
         date_blocks = []
         for sana in sorted(by_date):
             date_rows = sorted(by_date[sana], key=lambda r: 0 if r["_type"] == "expense" else 1)
-            items = [
-                (r.get("nomi") or r.get("kategoriya") or "-", r.get("miqdor") or 0, r.get("birlik") or "", r["umumiy_summa"], r["_type"])
-                for r in date_rows
-            ]
-            date_str = date.fromisoformat(sana).strftime("%d.%m.%Y")
-            date_blocks.append(_date_block(date_str, items))
 
-        sections.append(_project_header(project_name, reporter_name) + "\n\n" + "\n\n".join(date_blocks))
+            lines = []
+            if multi_day:
+                lines.append(f"🗓 {date.fromisoformat(sana).strftime('%d.%m.%Y')}")
+            total_income = 0.0
+            total_expense = 0.0
+            for i, r in enumerate(date_rows, start=1):
+                name = r.get("nomi") or r.get("kategoriya") or "-"
+                amount = r["umumiy_summa"]
+                lines.append(_daily_report_item_line(i, name, r.get("miqdor") or 0, r.get("birlik") or "", amount))
+                if r["_type"] == "income":
+                    total_income += amount
+                else:
+                    total_expense += amount
+            lines.append("")
+            lines.append(f"💰 Bugungi kirim: {_short_amount(total_income)}")
+            lines.append(f"💸 Bugungi xarajat: {_short_amount(total_expense)}")
+            lines.append(f"📊 Balans: {_short_amount(total_income - total_expense)}")
+            date_blocks.append("\n".join(lines))
+
+        sections.append(header + "\n\n" + "\n\n".join(date_blocks))
 
     return "\n\n".join(sections)
 

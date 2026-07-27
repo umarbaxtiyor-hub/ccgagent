@@ -8,7 +8,6 @@ from app.access import AllowedUser
 from app.db import async_session
 from app.handlers.common import parse_and_save_transactions, require_project
 from app.handlers.day_review import format_ack_table
-from app.handlers.keyboards import ack_choice_keyboard
 from app.models import Transaction, TransactionSource
 from app.services.users import get_or_create_user
 
@@ -50,9 +49,7 @@ async def handle_text_entry(message: Message) -> None:
         project_name = user.current_project.name if user.current_project else "-"
         reporter_name = user.full_name or user.username or "Xodim"
 
-    ack = await message.answer(
-        format_ack_table(items, project_name, reporter_name, editable=True), reply_markup=ack_choice_keyboard()
-    )
+    ack = await message.answer(format_ack_table(items, project_name, reporter_name))
 
     async with async_session() as session:
         result = await session.execute(select(Transaction).where(Transaction.id.in_(tx_ids)))
@@ -119,8 +116,7 @@ async def handle_text_edit(message: Message) -> None:
         await message.bot.edit_message_text(
             chat_id=message.chat.id,
             message_id=ack_message_id,
-            text=format_ack_table(items, project_name, reporter_name, editable=True),
-            reply_markup=ack_choice_keyboard(),
+            text=format_ack_table(items, project_name, reporter_name),
         )
     except Exception:
         logger.exception("Failed to update ack message after edit")

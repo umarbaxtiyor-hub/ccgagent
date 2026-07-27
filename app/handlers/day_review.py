@@ -212,31 +212,44 @@ def format_day_review(transactions: list[Transaction]) -> str:
     return "\n\n".join(sections)
 
 
-def format_ack_table(items: list[dict], project_name: str, reporter_name: str, editable: bool = False) -> str:
-    """Short plain acknowledgement shown right after a message is parsed.
-    Deliberately NOT the heavy receipt-style table - that design made users
-    think this bot message itself was what they should long-press to edit,
-    which doesn't work (Telegram only lets you edit your own messages).
-    Reviewing, editing and confirming all happen from /daftar instead."""
+_UNIT_ABBREV = {
+    "dona": "d",
+    "litr": "l",
+    "qop": "q",
+    "tonna": "t",
+    "kg": "kg",
+    "m": "m",
+    "m2": "m2",
+    "m3": "m3",
+    "kun": "kun",
+}
+
+
+def _abbrev_unit(unit: str) -> str:
+    if not unit:
+        return ""
+    key = unit.strip().lower()
+    return _UNIT_ABBREV.get(key, key[:2])
+
+
+def format_ack_table(items: list[dict], project_name: str, reporter_name: str) -> str:
+    """Short plain acknowledgement shown right after a message is parsed -
+    it already lands in /daftar automatically, so this is just a quick
+    confirmation of what was understood, not a call to action."""
     lines = []
     total = 0.0
     for p in items:
         name = h(p.get("description") or p["category"])
         amount = float(p["amount"])
+        qty = float(p.get("quantity") or 0)
+        unit = _abbrev_unit(p.get("unit") or "")
+        qty_part = f" ({qty:g}{f' {unit}' if unit else ''})" if qty else ""
         sign = "-" if p["type"] == "expense" else "+"
         total += -amount if p["type"] == "expense" else amount
-        lines.append(f"• {name} — {sign}{_fmt_amount(amount)} so'm")
-    total_line = f"Jami: {_fmt_amount(total)} so'm"
-    hint = (
-        "To'g'irlash uchun shu xabaringizni tahrirlang (uzoq bosib \"Edit\"), yoki 📒 Daftar orqali."
-        if editable
-        else "Ko'rish, to'g'irlash va tasdiqlash uchun 📒 Daftar."
-    )
-    return (
-        "✅ Qabul qilindi (tasdiqlash kutilmoqda)\n\n"
-        + "\n".join(lines)
-        + f"\n\n{total_line}\n\n{hint}"
-    )
+        lines.append(f"• {name}{qty_part} — {sign}{_short_amount(amount)} so'm")
+    total_sign = "-" if total < 0 else ""
+    total_line = f"Jami: {total_sign}{_short_amount(total)} so'm"
+    return "✅ Qabul qilindi (tasdiqlash kutilmoqda)\n\n" + "\n".join(lines) + f"\n\n{total_line}"
 
 
 async def _unconfirmed_for_user(session: AsyncSession, user_id: int) -> list[Transaction]:
@@ -286,8 +299,9 @@ async def open_daftar_button(message: Message) -> None:
 
 @router.message(F.text == "🔄 Yangilash", AllowedUser())
 async def refresh_main_menu(message: Message) -> None:
-    """Reply-keyboard buttons can't update their own label, so this resends
-    the keyboard with a fresh unconfirmed-count on the Daftar button."""
+    """A general refresh: updates the unconfirmed-count on the persistent
+    Daftar button (reply keyboards can't update their own label otherwise)
+    and shows the full up-to-date Daftar content, not just a count."""
     async with async_session() as session:
         user = await get_or_create_user(
             session,
@@ -295,31 +309,16 @@ async def refresh_main_menu(message: Message) -> None:
             full_name=message.from_user.full_name,
             username=message.from_user.username or "",
         )
-        count = len(await _unconfirmed_for_user(session, user.id))
-    await message.answer(
-        f"🔄 Yangilandi: {count} ta tasdiqlanmagan yozuv.", reply_markup=daftar_reply_keyboard(count)
-    )
+        transactions = await _unconfirmed_for_user(session, user.id)
+        count = len(transactions)
+        if transactions:
+            text = format_day_review(transactions) + "\n\nTahrirlash yoki o'chirish uchun tugmani bosing."
+            markup = day_review_keyboard()
+        else:
+            text, markup = "Tasdiqlanmagan yozuvlar yo'q.", None
 
-
-@router.callback_query(F.data == "ack_goto_daftar")
-async def ack_goto_daftar(callback: CallbackQuery) -> None:
-    async with async_session() as session:
-        text, markup = await _open_daftar(
-            session, callback.from_user.id, callback.from_user.full_name, callback.from_user.username or ""
-        )
-    await callback.message.answer(text, reply_markup=markup)
-    await callback.answer()
-
-
-_EDIT_HINT = (
-    "Xabaringizni to'g'irlash uchun: o'zingiz yozgan xabar ustiga bosib turing va "
-    "\"Tahrirlash\"/\"Edit\"ni tanlang, kerakli joyini o'zgartirib qayta yuboring."
-)
-
-
-@router.callback_query(F.data == "ack_edit_hint")
-async def ack_edit_hint(callback: CallbackQuery) -> None:
-    await callback.answer(_EDIT_HINT, show_alert=True)
+    await message.answer(f"🔄 Yangilandi ({count} ta yozuv)", reply_markup=daftar_reply_keyboard(count))
+    await message.answer(text, reply_markup=markup)
 
 
 @router.callback_query(F.data == "day_edit_hint")

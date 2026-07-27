@@ -8,7 +8,6 @@ from app.access import AllowedUser
 from app.db import async_session
 from app.handlers.common import require_project
 from app.handlers.day_review import format_ack_table
-from app.handlers.keyboards import ack_choice_keyboard
 from app.models import Transaction, TransactionSource, TransactionType
 from app.services.ai_parser import parse_receipt_image
 from app.services.categories import category_names, get_or_create_category
@@ -87,6 +86,4 @@ async def handle_receipt_photo(message: Message) -> None:
         reporter_name = user.full_name or user.username or "Xodim"
 
     await status_msg.delete()
-    await message.answer(
-        format_ack_table(valid_items, project_name, reporter_name), reply_markup=ack_choice_keyboard()
-    )
+    await message.answer(format_ack_table(valid_items, project_name, reporter_name))

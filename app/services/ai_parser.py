@@ -46,7 +46,13 @@ def _build_transaction_item_schema(expense_categories: list[str], income_categor
             "category": _category_field(expense_categories, income_categories),
             "description": {
                 "type": "STRING",
-                "description": "Qisqa tavsif (nima uchun to'lov/kirim)",
+                "description": (
+                    "Aniq mahsulot yoki xizmat nomi (masalan 'Benzin', 'Go'sht xaridi', "
+                    "'Sement', 'Ish haqi') - matnda/rasmda qanday aytilgan/yozilgan bo'lsa shunga "
+                    "yaqin, tabiiy nom. HECH QACHON 'xarajati' so'zini oxiriga qo'shib yozma "
+                    "('Benzin xarajati' EMAS, faqat 'Benzin'; 'Sement xarajati' EMAS, faqat "
+                    "'Sement') - bu keraksiz va takrorlanuvchi."
+                ),
             },
             "counterparty": {
                 "type": "STRING",

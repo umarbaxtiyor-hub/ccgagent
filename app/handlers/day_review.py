@@ -14,7 +14,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.access import AllowedUser
-from app.config import settings
 from app.db import async_session
 from app.handlers.keyboards import (
     daftar_reply_keyboard,
@@ -110,16 +109,37 @@ def _daily_report_item_line(idx: int, name: str, qty: float, unit: str, amount: 
     return f"{idx}. {h(name)}{qty_part} — {_short_amount(amount)}"
 
 
-def format_daily_text_report(rows: list[dict], reporter_name: str) -> str:
+def transaction_to_row(t: Transaction) -> dict:
+    """Flattens a confirmed Transaction into the plain-dict shape used both
+    for Google Sheets sync and for the CEO daily report."""
+    return {
+        "_type": t.type.value,
+        "sana": t.occurred_on.isoformat(),
+        "nomi": t.description or t.counterparty,
+        "miqdor": float(t.quantity) or "",
+        "birlik": t.unit,
+        "birim_narx": float(t.unit_price) or "",
+        "umumiy_summa": float(t.amount),
+        "kategoriya": t.category.name if t.category else "",
+        "kim_yozdi": t.created_by.full_name if t.created_by else "",
+        "loyiha": t.project.name if t.project else "",
+        "tolov_turi": t.payment_type,
+        "asl_xabar": t.raw_text,
+        "izoh": t.counterparty if t.description else "",
+    }
+
+
+def format_daily_text_report(rows: list[dict]) -> str:
     """Minimal daily report for the CEO: title + project/employee, one line
-    per expense/income item, then totals. Split by day only when the batch
-    actually spans more than one date (accumulated over several days)."""
-    by_project: dict[str, list[dict]] = defaultdict(list)
+    per expense/income item, then totals. One section per (project, employee)
+    pair - a nightly digest can contain several employees/projects at once.
+    Split by day only when a section actually spans more than one date."""
+    by_group: dict[tuple[str, str], list[dict]] = defaultdict(list)
     for row in rows:
-        by_project[row.get("loyiha") or "-"].append(row)
+        by_group[(row.get("loyiha") or "-", row.get("kim_yozdi") or "-")].append(row)
 
     sections = []
-    for project_name, project_rows in by_project.items():
+    for (project_name, reporter_name), project_rows in by_group.items():
         by_date: dict[str, list[dict]] = defaultdict(list)
         for r in project_rows:
             by_date[r["sana"]].append(r)
@@ -455,32 +475,12 @@ async def confirm_all(callback: CallbackQuery) -> None:
             return
 
         rows = []
-        occurred_dates = []
         for t in transactions:
             t.confirmed = True
             if t.quantity and not t.unit_price:
                 t.unit_price = float(t.amount) / float(t.quantity)
-            occurred_dates.append(t.occurred_on)
-            rows.append(
-                {
-                    "_type": t.type.value,
-                    "sana": t.occurred_on.isoformat(),
-                    "nomi": t.description or t.counterparty,
-                    "miqdor": float(t.quantity) or "",
-                    "birlik": t.unit,
-                    "birim_narx": float(t.unit_price) or "",
-                    "umumiy_summa": float(t.amount),
-                    "kategoriya": t.category.name if t.category else "",
-                    "kim_yozdi": t.created_by.full_name if t.created_by else "",
-                    "loyiha": t.project.name if t.project else "",
-                    "tolov_turi": t.payment_type,
-                    "asl_xabar": t.raw_text,
-                    "izoh": t.counterparty if t.description else "",
-                }
-            )
+            rows.append(transaction_to_row(t))
         await session.commit()
-
-        reporter_name = user.full_name or user.username or "Xodim"
 
     for row in rows:
         sheet_row = {k: v for k, v in row.items() if k != "_type"}
@@ -491,14 +491,6 @@ async def confirm_all(callback: CallbackQuery) -> None:
     )
     await callback.answer("Tasdiqlandi")
     await callback.message.answer("📒 Daftar bo'sh.", reply_markup=daftar_reply_keyboard(0))
-
-    if settings.report_recipient_id:
-        try:
-            recipient_id = int(settings.report_recipient_id)
-            report_text = format_daily_text_report(rows, reporter_name)
-            await callback.bot.send_message(chat_id=recipient_id, text=report_text)
-        except Exception:
-            logger.exception("Failed to send daily report to recipient")
 
 
 @router.callback_query(F.data == "day_cancel_all")

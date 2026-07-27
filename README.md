@@ -49,12 +49,14 @@ Telegram bot orqali kunlik xarajatlar va bank hisobidan o'tadigan pullarni
   avtomatik ravishda mavjud Google Sheet jadvaliga qator bo'lib qo'shiladi
   (pastdagi "Google Sheetsga ulash" bo'limiga qarang).
 - **Avtomatik kunlik hisobot (ixtiyoriy)**: `REPORT_RECIPIENT_ID` sozlansa
-  (masalan CEOning Telegram ID'si), har safar kimdir `/daftar`ni
-  "Barchasini tasdiqlash" bilan yakunlaganda, o'sha kunlik yozuvlar bo'yicha
-  oddiy matnli hisobot (fayl emas) avtomatik shu Telegram ID'ga yuboriladi:
-  qaysi loyiha, kim tomonidan, kirim/chiqim/balans, va xarajatlar ro'yxati
-  (nomi, hajmi, birim narx, jami narx, izoh). Har bir foydalanuvchi o'z
-  ID'sini `/mening_id` orqali bilib olishi mumkin.
+  (masalan CEOning Telegram ID'si), har kuni soat **21:00 (Toshkent vaqti)**
+  da o'sha kuni tasdiqlangan barcha loyihalar/xodimlar bo'yicha BITTA
+  umumlashtirilgan matnli hisobot avtomatik shu Telegram ID'ga yuboriladi
+  (agar o'sha kuni birorta ham tasdiqlangan yozuv bo'lmasa, hisobot
+  yuborilmaydi). Xodimlar kun davomida `/daftar`dan tasdiqlaganda CEOga
+  alohida xabar ketmaydi - hammasi kechqurungi yagona hisobotga
+  jamlanadi. Har bir foydalanuvchi o'z ID'sini `/mening_id` orqali bilib
+  olishi mumkin.
 
 ## O'rnatish
 

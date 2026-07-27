@@ -25,13 +25,16 @@ logger = logging.getLogger(__name__)
 _ALLOWED_EXT = (".xlsx", ".xls", ".csv")
 
 
-@router.message(F.document, AllowedUser())
-async def handle_bank_statement(message: Message) -> None:
-    filename = message.document.file_name or ""
-    if not filename.lower().endswith(_ALLOWED_EXT):
-        await message.answer("Faqat .xlsx yoki .csv formatidagi bank ko'chirmasi fayllarini qabul qilaman.")
-        return
+def _is_bank_statement_file(message: Message) -> bool:
+    """Only claim documents that look like a bank statement, so image
+    documents (receipt/table screenshots sent as an uncompressed file)
+    fall through to the receipt handler instead of being rejected here."""
+    filename = (message.document.file_name or "").lower()
+    return filename.endswith(_ALLOWED_EXT)
 
+
+@router.message(F.document, _is_bank_statement_file, AllowedUser())
+async def handle_bank_statement(message: Message) -> None:
     async with async_session() as session:
         user = await get_or_create_user(
             session,

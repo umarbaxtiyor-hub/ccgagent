@@ -19,6 +19,31 @@ logger = logging.getLogger(__name__)
 
 @router.message(F.photo, AllowedUser())
 async def handle_receipt_photo(message: Message) -> None:
+    photo = message.photo[-1]
+    file = await message.bot.get_file(photo.file_id)
+    buffer = await message.bot.download_file(file.file_path)
+    await _process_receipt_image(message, buffer.read(), "image/jpeg")
+
+
+@router.message(F.document, AllowedUser())
+async def handle_receipt_document(message: Message) -> None:
+    """Telegram heavily compresses/downscales images sent as a regular
+    "photo" - fine for a single receipt, but it turns dense multi-row
+    table screenshots (20-30+ rows) blurry and causes misreads. Sending
+    the same image as a "file" (document) keeps the original resolution,
+    so this handles that path too for much better accuracy on big tables."""
+    doc = message.document
+    if not doc.mime_type or not doc.mime_type.startswith("image/"):
+        await message.answer(
+            "Faqat rasm (chek/jadval skrinshoti) yoki .xlsx/.csv (bank ko'chirmasi) fayllarini qabul qilaman."
+        )
+        return
+    file = await message.bot.get_file(doc.file_id)
+    buffer = await message.bot.download_file(file.file_path)
+    await _process_receipt_image(message, buffer.read(), doc.mime_type)
+
+
+async def _process_receipt_image(message: Message, image_bytes: bytes, media_type: str) -> None:
     async with async_session() as session:
         user = await get_or_create_user(
             session,
@@ -31,16 +56,11 @@ async def handle_receipt_photo(message: Message) -> None:
         expense_cats = await category_names(session, TransactionType.expense)
         income_cats = await category_names(session, TransactionType.income)
 
-    photo = message.photo[-1]
-    file = await message.bot.get_file(photo.file_id)
-    buffer = await message.bot.download_file(file.file_path)
-    image_bytes = buffer.read()
-
     status_msg = await message.answer("Chekni o'qiyapman...")
 
     try:
         parsed_items = await parse_receipt_image(
-            image_bytes, "image/jpeg", expense_cats, income_cats, date.today()
+            image_bytes, media_type, expense_cats, income_cats, date.today()
         )
     except Exception as e:
         logger.exception("parse_receipt_image failed")

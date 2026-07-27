@@ -305,7 +305,12 @@ async def parse_receipt_image(
         "tartibda, siljitmasdan davom ettir - taxmin qilib noto'g'ri raqam yozgandan ko'ra qatorni "
         "o'tkazib yuborish yaxshiroq.\n"
         "4. Oxirida javobingizdagi elementlar soni jadvaldagi (o'qib bo'lgan) qatorlar soniga mos "
-        "kelishini o'zing tekshirib chiq.\n\n"
+        "kelishini o'zing tekshirib chiq.\n"
+        "5. Jadvalda lotin va kirill yozuvi aralash bo'lishi mumkin (masalan \"Профиль\", \"Саморез\", "
+        "\"Профнастил\" kabi kirilcha nomlar lotincha nomlar bilan bitta jadvalda kelishi mumkin). "
+        "Yozuv turi o'zgarishi hech qanday qatorni o'tkazib yuborish yoki qo'shni qatorlar bilan "
+        "aralashtirish sababi bo'lmasligi kerak - kirilcha nomli qatorlarni ham xuddi lotincha "
+        "qatorlar kabi bir xil diqqat bilan, alohida-alohida o'qi.\n\n"
         "Agar rasmda faqat bitta band bo'lsa, bitta elementli ro'yxat qaytar. Agar chekdagi/jadvaldagi "
         "sana o'qib bo'lmasa, bugungi sanani ishlat."
     )

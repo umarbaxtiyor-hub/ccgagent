@@ -1,4 +1,5 @@
 import logging
+import traceback
 
 from aiogram import Router
 from aiogram.types import ErrorEvent
@@ -41,8 +42,14 @@ async def handle_unhandled_error(event: ErrorEvent) -> None:
 
     if chat_message is not None:
         try:
+            # Temporary diagnostic detail (this is an internal ops bot, no
+            # secrets in a bare exception message) so failures can be
+            # screenshotted and fixed without needing to dig through
+            # Railway's log dashboard for every new bug.
+            tb_line = traceback.format_exception(event.exception)[-1].strip()
             await chat_message.answer(
-                "Kechirasiz, kutilmagan ichki xatolik yuz berdi. Iltimos, qayta urinib ko'ring."
+                "Kechirasiz, kutilmagan ichki xatolik yuz berdi. Iltimos, qayta urinib ko'ring.\n"
+                f"(texnik xato: {tb_line[:300]})"
             )
         except Exception:
             logger.exception("Failed to notify user about unhandled error")

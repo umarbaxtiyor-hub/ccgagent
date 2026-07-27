@@ -8,7 +8,7 @@ from aiogram.enums import ParseMode
 from app.config import settings
 from app.db import init_db
 from app.handlers import main_router
-from app.services.scheduler import run_daily_ceo_digest
+from app.services.scheduler import run_daftar_reminder, run_daily_ceo_digest
 
 logging.basicConfig(level=logging.INFO)
 
@@ -20,6 +20,7 @@ async def main() -> None:
     dp = Dispatcher()
     dp.include_router(main_router)
 
+    asyncio.create_task(run_daftar_reminder(bot))
     asyncio.create_task(run_daily_ceo_digest(bot))
 
     await bot.delete_webhook(drop_pending_updates=True)

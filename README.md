@@ -62,7 +62,14 @@ Telegram bot orqali kunlik xarajatlar va bank hisobidan o'tadigan pullarni
   bo'yicha **umumiy xulosa** xabari avtomatik yuboriladi (agar o'sha kuni
   hech narsa tasdiqlanmagan bo'lsa, hech narsa yuborilmaydi). Xodimlar kun
   davomida `/daftar`dan tasdiqlaganda alohida xabar ketmaydi - hammasi
-  kechqurungi hisobotga jamlanadi.
+  kechqurungi hisobotga jamlanadi. Hisobot faqat **tasdiqlangan** yozuvlarni
+  o'z ichiga oladi, shuning uchun:
+  - Soat **19:30**da, agar xodimning o'sha kunga tasdiqlanmagan yozuvi bo'lsa,
+    unga shaxsiy eslatma xabari boradi ("Daftaringizni tasdiqlashni unutmang").
+  - Soat 20:00'dagi hisobotning oxirida, agar hali ham kimningdir
+    tasdiqlanmagan yozuvi qolgan bo'lsa, guruhga "⚠️ Hali tasdiqlanmagan"
+    degan qo'shimcha xabar ham boradi - kim va qaysi loyiha bo'yicha
+    hisobot to'liq emasligini ko'rsatadi.
 - **Guruhda savol-javob (ixtiyoriy)**: bot biriktirilgan guruhda botni
   `@username` bilan mention qilib yoki uning xabariga reply qilib savol
   bersangiz (masalan "bu oy LOT 8'da qancha xarajat bo'ldi?"), AI bazadagi

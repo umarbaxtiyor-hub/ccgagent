@@ -42,21 +42,34 @@ Telegram bot orqali kunlik xarajatlar va bank hisobidan o'tadigan pullarni
   boshidan hozirgacha (kumulyativ, kun-kunlar qatorlari uzluksiz davom
   etadigan) hisobot Excel faylda (tranzaksiyalar ro'yxati + loyiha/kategoriya
   bo'yicha jamlanma) yuboriladi.
-- Botdan faqat `ALLOWED_USER_IDS` da ko'rsatilgan Telegram foydalanuvchilari
-  foydalana oladi.
+- **Ruxsat berish (admin buyrug'i bilan)**: yangi foydalanuvchi `/start`
+  bosganda, agar u hali tasdiqlanmagan bo'lsa, botdan foydalana olmaydi -
+  o'rniga barcha adminlarga ismi/ID'si va "loyiha tanlash" (bu ham ruxsat
+  beradi, ham loyihaga biriktiradi) yoki "✅ Faqat ruxsat berish (loyihasiz)"
+  tugmalari bilan xabar boradi. Bitta tugma bosish kifoya - Railway'da
+  `ALLOWED_USER_IDS`ni qo'lda o'zgartirib qayta deploy qilish shart emas.
+  (`ALLOWED_USER_IDS` hamon ixtiyoriy qo'shimcha/eski usul sifatida ishlaydi,
+  agar kimdir shu orqali ham ruxsat bermoqchi bo'lsa.)
 - **Google Sheets sinxronizatsiyasi (ixtiyoriy)**: `/daftar` orqali
   tasdiqlangan (yoki bank ko'chirmasidan tasdiqlangan) har bir tranzaksiya
   avtomatik ravishda mavjud Google Sheet jadvaliga qator bo'lib qo'shiladi
   (pastdagi "Google Sheetsga ulash" bo'limiga qarang).
-- **Avtomatik kunlik hisobot (ixtiyoriy)**: `REPORT_RECIPIENT_ID` sozlansa
-  (masalan CEOning Telegram ID'si), har kuni soat **21:00 (Toshkent vaqti)**
-  da o'sha kuni tasdiqlangan barcha loyihalar/xodimlar bo'yicha BITTA
-  umumlashtirilgan matnli hisobot avtomatik shu Telegram ID'ga yuboriladi
-  (agar o'sha kuni birorta ham tasdiqlangan yozuv bo'lmasa, hisobot
-  yuborilmaydi). Xodimlar kun davomida `/daftar`dan tasdiqlaganda CEOga
-  alohida xabar ketmaydi - hammasi kechqurungi yagona hisobotga
-  jamlanadi. Har bir foydalanuvchi o'z ID'sini `/mening_id` orqali bilib
-  olishi mumkin.
+- **Avtomatik kunlik hisobot guruhga (ixtiyoriy)**: `REPORT_RECIPIENT_ID`
+  sozlansa (shaxsiy Telegram ID yoki bir guruh chat ID'si - guruhning ID'sini
+  botni guruhga qo'shib, shu yerda `/guruh_id` yozib bilib olasiz), har kuni
+  soat **20:00 (Toshkent vaqti)** da o'sha kuni tasdiqlangan yozuvlar bo'yicha
+  **har bir loyiha uchun alohida xabar**, so'ngida esa barcha loyihalar
+  bo'yicha **umumiy xulosa** xabari avtomatik yuboriladi (agar o'sha kuni
+  hech narsa tasdiqlanmagan bo'lsa, hech narsa yuborilmaydi). Xodimlar kun
+  davomida `/daftar`dan tasdiqlaganda alohida xabar ketmaydi - hammasi
+  kechqurungi hisobotga jamlanadi.
+- **Guruhda savol-javob (ixtiyoriy)**: bot biriktirilgan guruhda botni
+  `@username` bilan mention qilib yoki uning xabariga reply qilib savol
+  bersangiz (masalan "bu oy LOT 8'da qancha xarajat bo'ldi?"), AI bazadagi
+  aniq hisoblangan raqamlarga asoslanib javob beradi (o'zidan raqam
+  o'ylab topmaydi). Guruhdagi oddiy suhbatga aralashmaydi - faqat to'g'ridan
+  to'g'ri murojaat qilinganda javob beradi. Xarajat kiritish (erkin matn/
+  ovoz/rasm) esa hamon faqat shaxsiy chatda ishlaydi - guruhda emas.
 
 ## O'rnatish
 

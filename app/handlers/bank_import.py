@@ -33,7 +33,7 @@ def _is_bank_statement_file(message: Message) -> bool:
     return filename.endswith(_ALLOWED_EXT)
 
 
-@router.message(F.document, _is_bank_statement_file, AllowedUser())
+@router.message(F.chat.type == "private", F.document, _is_bank_statement_file, AllowedUser())
 async def handle_bank_statement(message: Message) -> None:
     async with async_session() as session:
         user = await get_or_create_user(

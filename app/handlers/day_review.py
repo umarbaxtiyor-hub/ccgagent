@@ -136,50 +136,59 @@ def transaction_to_row(t: Transaction) -> dict:
     }
 
 
-def format_daily_text_report(rows: list[dict]) -> str:
-    """Minimal daily report for the CEO: title + project/employee, one line
-    per expense/income item, then totals. One section per (project, employee)
-    pair - a nightly digest can contain several employees/projects at once.
-    Split by day only when a section actually spans more than one date."""
-    by_group: dict[tuple[str, str], list[dict]] = defaultdict(list)
+def format_project_report_messages(rows: list[dict]) -> list[str]:
+    """One message per project (all its confirmed rows for the day - if more
+    than one employee worked on it, each line is tagged with who logged it),
+    followed by one final overall summary message across every project.
+    Used for the nightly group digest, which always covers a single day."""
+    by_project: dict[str, list[dict]] = defaultdict(list)
     for row in rows:
-        by_group[(row.get("loyiha") or "-", row.get("kim_yozdi") or "-")].append(row)
+        by_project[row.get("loyiha") or "-"].append(row)
 
-    sections = []
-    for (project_name, reporter_name), project_rows in by_group.items():
-        by_date: dict[str, list[dict]] = defaultdict(list)
-        for r in project_rows:
-            by_date[r["sana"]].append(r)
-        multi_day = len(by_date) > 1
+    messages = []
+    project_totals: list[tuple[str, float, float]] = []
+    grand_income = 0.0
+    grand_expense = 0.0
 
-        header = f"📋 DAILY REPORT\n🏗 {h(project_name)}\n👤 {h(reporter_name)}"
+    for project_name, project_rows in by_project.items():
+        employees = {r.get("kim_yozdi") or "-" for r in project_rows}
+        multi_employee = len(employees) > 1
+        ordered_rows = sorted(project_rows, key=lambda r: 0 if r["_type"] == "expense" else 1)
 
-        date_blocks = []
-        for sana in sorted(by_date):
-            date_rows = sorted(by_date[sana], key=lambda r: 0 if r["_type"] == "expense" else 1)
+        lines = [f"📋 LOYIHA: {h(project_name)}", ""]
+        total_income = 0.0
+        total_expense = 0.0
+        for i, r in enumerate(ordered_rows, start=1):
+            name = r.get("nomi") or r.get("kategoriya") or "-"
+            amount = r["umumiy_summa"]
+            line = _daily_report_item_line(i, name, r.get("miqdor") or 0, r.get("birlik") or "", amount)
+            if multi_employee:
+                line += f" ({h(r.get('kim_yozdi') or '-')})"
+            lines.append(line)
+            if r["_type"] == "income":
+                total_income += amount
+            else:
+                total_expense += amount
+        lines.append("")
+        lines.append(f"💰 Kirim: {_short_amount(total_income)}")
+        lines.append(f"💸 Chiqim: {_short_amount(total_expense)}")
+        lines.append(f"📊 Balans: {_short_signed(total_income - total_expense)}")
+        messages.append("\n".join(lines))
 
-            lines = []
-            if multi_day:
-                lines.append(f"🗓 {date.fromisoformat(sana).strftime('%d.%m.%Y')}")
-            total_income = 0.0
-            total_expense = 0.0
-            for i, r in enumerate(date_rows, start=1):
-                name = r.get("nomi") or r.get("kategoriya") or "-"
-                amount = r["umumiy_summa"]
-                lines.append(_daily_report_item_line(i, name, r.get("miqdor") or 0, r.get("birlik") or "", amount))
-                if r["_type"] == "income":
-                    total_income += amount
-                else:
-                    total_expense += amount
-            lines.append("")
-            lines.append(f"💰 Bugungi kirim: {_short_amount(total_income)}")
-            lines.append(f"💸 Bugungi xarajat: {_short_amount(total_expense)}")
-            lines.append(f"📊 Balans: {_short_signed(total_income - total_expense)}")
-            date_blocks.append("\n".join(lines))
+        project_totals.append((project_name, total_income, total_expense))
+        grand_income += total_income
+        grand_expense += total_expense
 
-        sections.append(header + "\n\n" + "\n\n".join(date_blocks))
+    summary_lines = ["📊 UMUMIY XULOSA (barcha loyihalar)", ""]
+    for name, inc, exp in project_totals:
+        summary_lines.append(f"• {h(name)}: {_short_signed(inc - exp)}")
+    summary_lines.append("")
+    summary_lines.append(f"💰 Jami kirim: {_short_amount(grand_income)}")
+    summary_lines.append(f"💸 Jami chiqim: {_short_amount(grand_expense)}")
+    summary_lines.append(f"📊 Umumiy balans: {_short_signed(grand_income - grand_expense)}")
+    messages.append("\n".join(summary_lines))
 
-    return "\n\n".join(sections)
+    return messages
 
 
 def format_day_review(transactions: list[Transaction]) -> str:
@@ -285,7 +294,7 @@ async def _open_daftar(session: AsyncSession, telegram_id: int, full_name: str, 
     return await _render_day_list(session, user.id)
 
 
-@router.message(Command("daftar", "kun_yakuni"), AllowedUser())
+@router.message(F.chat.type == "private", Command("daftar", "kun_yakuni"), AllowedUser())
 async def cmd_daftar(message: Message) -> None:
     async with async_session() as session:
         text, markup = await _open_daftar(
@@ -294,7 +303,7 @@ async def cmd_daftar(message: Message) -> None:
     await message.answer(text, reply_markup=markup)
 
 
-@router.message(F.text.startswith("📒 Daftar"), AllowedUser())
+@router.message(F.chat.type == "private", F.text.startswith("📒 Daftar"), AllowedUser())
 async def open_daftar_button(message: Message) -> None:
     async with async_session() as session:
         text, markup = await _open_daftar(
@@ -303,7 +312,7 @@ async def open_daftar_button(message: Message) -> None:
     await message.answer(text, reply_markup=markup)
 
 
-@router.message(F.text == "🔄 Yangilash", AllowedUser())
+@router.message(F.chat.type == "private", F.text == "🔄 Yangilash", AllowedUser())
 async def refresh_main_menu(message: Message) -> None:
     """A general refresh: updates the unconfirmed-count on the persistent
     Daftar button (reply keyboards can't update their own label otherwise)
@@ -350,7 +359,7 @@ async def day_edit_hint(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
 
 
-@router.message(StateFilter(DaftarEdit.waiting_instruction), F.text, AllowedUser())
+@router.message(F.chat.type == "private", StateFilter(DaftarEdit.waiting_instruction), F.text, AllowedUser())
 async def apply_edit_instruction(message: Message, state: FSMContext) -> None:
     await state.clear()
     async with async_session() as session:

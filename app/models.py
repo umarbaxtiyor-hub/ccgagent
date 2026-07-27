@@ -41,6 +41,11 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(255), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
+    # Admin-approved via an in-bot button (see projects.py assign_new_user /
+    # approve_new_user) instead of the old Railway-env-var ALLOWED_USER_IDS
+    # allowlist, which required a redeploy for every new employee.
+    is_approved: Mapped[bool] = mapped_column(Boolean, default=False)
+
     current_project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), nullable=True)
     current_project: Mapped["Project | None"] = relationship(back_populates="users")
 

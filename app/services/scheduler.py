@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.db import async_session
-from app.handlers.day_review import format_daily_text_report, transaction_to_row
+from app.handlers.day_review import format_project_report_messages, transaction_to_row
 from app.models import Transaction
 
 logger = logging.getLogger(__name__)
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 # so a plain fixed-offset timezone is simpler and more robust here than
 # depending on a system/tzdata "Asia/Tashkent" zoneinfo entry being present.
 _TASHKENT = timezone(timedelta(hours=5))
-_DIGEST_HOUR = 21
+_DIGEST_HOUR = 20
 
 
 async def _confirmed_rows_for_date(target_date) -> list[dict]:
@@ -36,10 +36,12 @@ async def _confirmed_rows_for_date(target_date) -> list[dict]:
 
 
 async def run_daily_ceo_digest(bot: Bot) -> None:
-    """Runs forever, sending one consolidated report to REPORT_RECIPIENT_ID
-    every day at 21:00 Tashkent time, covering that day's confirmed
-    transactions across all employees/projects - replaces the old behavior
-    of pinging the recipient separately every time an employee confirmed."""
+    """Runs forever, sending a report to REPORT_RECIPIENT_ID (a personal
+    chat or a group) every day at 20:00 Tashkent time, covering that day's
+    confirmed transactions across all employees/projects - replaces the old
+    behavior of pinging the recipient separately every time an employee
+    confirmed. Sends one message per project, then a final message
+    summarizing all projects together."""
     if not settings.report_recipient_id:
         return
 
@@ -54,8 +56,8 @@ async def run_daily_ceo_digest(bot: Bot) -> None:
             rows = await _confirmed_rows_for_date(target.date())
             if not rows:
                 continue
-            report_text = format_daily_text_report(rows)
             recipient_id = int(settings.report_recipient_id)
-            await bot.send_message(chat_id=recipient_id, text=report_text)
+            for report_text in format_project_report_messages(rows):
+                await bot.send_message(chat_id=recipient_id, text=report_text)
         except Exception:
             logger.exception("Failed to send nightly CEO digest")

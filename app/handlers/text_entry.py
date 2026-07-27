@@ -26,7 +26,7 @@ async def _find_by_source_message(session, user_id: int, message_id: int) -> lis
     return list(result.scalars().all())
 
 
-@router.message(F.text, ~F.text.startswith("/"), AllowedUser())
+@router.message(F.chat.type == "private", F.text, ~F.text.startswith("/"), AllowedUser())
 async def handle_text_entry(message: Message) -> None:
     async with async_session() as session:
         user = await get_or_create_user(
@@ -58,7 +58,7 @@ async def handle_text_entry(message: Message) -> None:
         await session.commit()
 
 
-@router.edited_message(F.text, ~F.text.startswith("/"), AllowedUser())
+@router.edited_message(F.chat.type == "private", F.text, ~F.text.startswith("/"), AllowedUser())
 async def handle_text_edit(message: Message) -> None:
     """A user editing their own already-sent expense message (Telegram's
     native message-edit, not a bot button) re-parses it and updates the

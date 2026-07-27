@@ -17,7 +17,7 @@ router = Router()
 logger = logging.getLogger(__name__)
 
 
-@router.message(F.photo, AllowedUser())
+@router.message(F.chat.type == "private", F.photo, AllowedUser())
 async def handle_receipt_photo(message: Message) -> None:
     photo = message.photo[-1]
     file = await message.bot.get_file(photo.file_id)
@@ -25,7 +25,7 @@ async def handle_receipt_photo(message: Message) -> None:
     await _process_receipt_image(message, buffer.read(), "image/jpeg")
 
 
-@router.message(F.document, AllowedUser())
+@router.message(F.chat.type == "private", F.document, AllowedUser())
 async def handle_receipt_document(message: Message) -> None:
     """Telegram heavily compresses/downscales images sent as a regular
     "photo" - fine for a single receipt, but it turns dense multi-row

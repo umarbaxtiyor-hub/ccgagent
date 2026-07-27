@@ -15,7 +15,7 @@ router = Router()
 logger = logging.getLogger(__name__)
 
 
-@router.message(F.voice, AllowedUser())
+@router.message(F.chat.type == "private", F.voice, AllowedUser())
 async def handle_voice(message: Message) -> None:
     async with async_session() as session:
         user = await get_or_create_user(

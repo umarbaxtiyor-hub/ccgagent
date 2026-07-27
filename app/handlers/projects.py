@@ -85,6 +85,7 @@ async def cmd_loyiha_biriktir(message: Message) -> None:
     async with async_session() as session:
         project = await create_project(session, project_name)
         employee = await get_or_create_user(session, telegram_id=employee_id, full_name="", username="")
+        employee.is_approved = True
         await set_user_current_project(session, employee.id, project.id)
 
     await message.answer(f"✅ Xodim (ID: {employee_id}) \"{project.name}\" loyihasiga biriktirildi.")
@@ -113,6 +114,7 @@ async def assign_new_user(callback: CallbackQuery) -> None:
 
     async with async_session() as session:
         employee = await get_or_create_user(session, telegram_id=employee_id, full_name="", username="")
+        employee.is_approved = True
         await set_user_current_project(session, employee.id, project_id)
         projects = await list_projects(session)
         project = next((p for p in projects if p.id == project_id), None)
@@ -127,12 +129,39 @@ async def assign_new_user(callback: CallbackQuery) -> None:
         await callback.bot.send_message(
             chat_id=employee_id,
             text=(
-                f"📌 Sizga <b>{project_name}</b> loyihasi biriktirildi. Endi yuboradigan barcha "
-                "xabarlaringiz shu loyihaga tegishli bo'ladi."
+                f"✅ Sizga botdan foydalanish uchun ruxsat berildi va <b>{project_name}</b> loyihasi "
+                "biriktirildi. Endi yuboradigan barcha xabarlaringiz shu loyihaga tegishli bo'ladi."
             ),
         )
     except Exception:
         logger.exception("Failed to notify employee %s about project assignment", employee_id)
+
+
+@router.callback_query(F.data.startswith("newuser_approve:"))
+async def approve_new_user(callback: CallbackQuery) -> None:
+    if callback.from_user.id not in settings.admin_user_id_set:
+        await callback.answer("Bu amal faqat administrator uchun.", show_alert=True)
+        return
+
+    employee_id = int(callback.data.split(":", 1)[1])
+    async with async_session() as session:
+        employee = await get_or_create_user(session, telegram_id=employee_id, full_name="", username="")
+        employee.is_approved = True
+        await session.commit()
+
+    await callback.message.edit_text(f"✅ Xodim (ID: {employee_id}) uchun ruxsat berildi.", reply_markup=None)
+    await callback.answer("Ruxsat berildi")
+
+    try:
+        await callback.bot.send_message(
+            chat_id=employee_id,
+            text=(
+                "✅ Sizga botdan foydalanish uchun ruxsat berildi! /start buyrug'ini qayta yuboring. "
+                "Loyihangiz hali biriktirilmagan bo'lsa, administrator tez orada biriktiradi."
+            ),
+        )
+    except Exception:
+        logger.exception("Failed to notify employee %s about approval", employee_id)
 
 
 @router.callback_query(F.data.startswith("proj_select:"))

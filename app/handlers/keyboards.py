@@ -36,6 +36,14 @@ def new_user_assign_keyboard(employee_telegram_id: int, projects: list[Project])
                 for p in chunk
             ]
         )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text="✅ Faqat ruxsat berish (loyihasiz)",
+                callback_data=f"newuser_approve:{employee_telegram_id}",
+            )
+        ]
+    )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

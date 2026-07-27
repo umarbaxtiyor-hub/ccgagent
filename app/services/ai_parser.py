@@ -276,6 +276,75 @@ async def _generate_json(parts: list[dict[str, Any]], schema: dict[str, Any], mo
             raise
 
 
+async def _generate_text_gemini(prompt: str) -> str:
+    url = _GEMINI_API_URL.format(model=settings.gemini_model)
+    payload = {"contents": [{"role": "user", "parts": [{"text": prompt}]}]}
+    async with aiohttp.ClientSession() as session:
+        async with session.post(
+            url,
+            params={"key": settings.gemini_api_key},
+            json=payload,
+            timeout=aiohttp.ClientTimeout(total=60),
+        ) as resp:
+            if resp.status != 200:
+                text = await resp.text()
+                raise RuntimeError(f"Gemini API error {resp.status}: {text}")
+            data = await resp.json()
+    try:
+        return data["candidates"][0]["content"]["parts"][0]["text"]
+    except (KeyError, IndexError) as e:
+        raise ValueError(f"Gemini javobida matn topilmadi: {data}") from e
+
+
+async def _generate_text_openai(prompt: str) -> str:
+    payload = {"model": settings.openai_model, "messages": [{"role": "user", "content": prompt}]}
+    async with aiohttp.ClientSession() as session:
+        async with session.post(
+            _OPENAI_CHAT_URL,
+            headers={"Authorization": f"Bearer {settings.openai_api_key}"},
+            json=payload,
+            timeout=aiohttp.ClientTimeout(total=60),
+        ) as resp:
+            if resp.status != 200:
+                text = await resp.text()
+                raise RuntimeError(f"OpenAI API error {resp.status}: {text}")
+            data = await resp.json()
+    try:
+        return data["choices"][0]["message"]["content"]
+    except (KeyError, IndexError) as e:
+        raise ValueError(f"OpenAI javobida matn topilmadi: {data}") from e
+
+
+async def _generate_text(prompt: str) -> str:
+    """Plain free-text generation (no JSON schema) - used for the group Q&A
+    feature, which answers in natural language rather than extracting
+    structured data. Same Gemini-first, OpenAI-fallback behavior."""
+    try:
+        return await _generate_text_gemini(prompt)
+    except Exception as gemini_error:
+        if not settings.openai_api_key:
+            raise
+        logger.warning("Gemini failed (%s), falling back to OpenAI", gemini_error)
+        return await _generate_text_openai(prompt)
+
+
+async def answer_group_question(question: str, data_summary: str) -> str:
+    """Answers a group member's free-text question about the company's
+    expense data. The AI is instructed to rely ONLY on the precomputed
+    numbers it's given (see app.services.insights.build_data_summary) -
+    it must not invent figures, since this is real financial data."""
+    prompt = (
+        "Sen qurilish kompaniyasining moliyaviy hisobot botisan. Guruh a'zolari senga savol berishadi. "
+        "FAQAT quyida berilgan aniq hisoblangan ma'lumotlarga asoslanib javob ber - hech qanday raqamni "
+        "o'zingdan taxmin qilib yozma. Agar savolga javob berish uchun kerakli ma'lumot quyida yo'q "
+        "bo'lsa, buni ochiq ayt (masalan: \"bu ma'lumot hozircha mavjud emas\").\n\n"
+        f"Mavjud ma'lumotlar:\n{data_summary}\n\n"
+        f'Savol: "{question}"\n\n'
+        "Qisqa, aniq va tushunarli o'zbek tilida javob ber."
+    )
+    return await _generate_text(prompt)
+
+
 async def parse_expense_text(
     text: str,
     expense_categories: list[str],

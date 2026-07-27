@@ -13,125 +13,146 @@ logger = logging.getLogger(__name__)
 _GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 _OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions"
 
-_TRANSACTION_ITEM_SCHEMA = {
-    "type": "OBJECT",
-    "properties": {
-        "type": {
-            "type": "STRING",
-            "enum": ["income", "expense"],
-            "description": "income = kirim (pul kelishi), expense = chiqim (xarajat)",
-        },
-        "amount": {
-            "type": "NUMBER",
-            "description": "Summasi (faqat raqam, valyuta belgisisiz), so'mda",
-        },
-        "category": {
-            "type": "STRING",
-            "description": "Berilgan kategoriyalar ro'yxatidan eng mos kelgani, aks holda 'Boshqa xarajat' yoki 'Boshqa daromad'",
-        },
-        "description": {
-            "type": "STRING",
-            "description": "Qisqa tavsif (nima uchun to'lov/kirim)",
-        },
-        "counterparty": {
-            "type": "STRING",
-            "description": "To'lov qilingan/qabul qilingan tomon (agar mavjud bo'lsa), aks holda bo'sh qatr",
-        },
-        "occurred_on": {
-            "type": "STRING",
-            "description": "Sana YYYY-MM-DD formatida. Agar matnda sana ko'rsatilmagan bo'lsa, berilgan bugungi sanani ishlating.",
-        },
-        "quantity": {
-            "type": "NUMBER",
-            "description": "Agar matnda miqdor (masalan '10 litr', '5 qop') ko'rsatilgan bo'lsa shu son, aks holda 0",
-        },
-        "unit": {
-            "type": "STRING",
-            "description": (
-                "Miqdor birligi. Iloji boricha shu standart birliklardan birini ishlat: "
-                "'litr', 'kg', 'm' (chiziqli metr), 'm2', 'm3', 'dona', 'kun', 'qop', 'tonna'. "
-                "Agar matnda miqdor bor-u lekin birlik so'z bilan aytilmagan bo'lsa ham, xarajat "
-                "nima ekanini tahlil qilib eng mos birlikni o'zing tanla (masalan qurilish "
-                "materiallari - odatda 'dona' yoki 'qop', yoqilg'i/bo'yoq/suyuqlik - 'litr', "
-                "sement/qum kabi ommaviy materiallar - 'qop' yoki 'tonna', ish haqi/xizmat - "
-                "'kun'). Faqat miqdorning o'zi ham noaniq/ko'rsatilmagan bo'lsagina bo'sh qator qo'y."
-            ),
-        },
-        "unit_price": {
-            "type": "NUMBER",
-            "description": (
-                "Bitta birlik narxi (so'mda). Agar matnda to'g'ridan-to'g'ri aytilgan bo'lsa shuni "
-                "ishlat. Agar aytilmagan bo'lsa-yu, miqdor va umumiy summa ma'lum bo'lsa, "
-                "umumiy summani miqdorga bo'lib hisobla. Miqdorning o'zi noma'lum bo'lsa 0 qo'y."
-            ),
-        },
-        "payment_type": {
-            "type": "STRING",
-            "enum": ["naqd", "bank"],
-            "description": "To'lov turi: naqd pul yoki bank orqali. Matnda ko'rsatilmagan bo'lsa 'naqd' deb ol.",
-        },
-        "confidence": {
-            "type": "STRING",
-            "enum": ["high", "low"],
-            "description": "Agar matn tushunarsiz yoki summa aniq bo'lmasa 'low', aks holda 'high'",
-        },
-    },
-    "required": ["type", "amount", "category", "description", "occurred_on", "confidence"],
-}
+def _category_field(expense_categories: list[str], income_categories: list[str]) -> dict:
+    """Constrains the category to an ENUM of exactly the categories that
+    exist today, instead of a freeform string. A freeform string let the
+    model invent slightly-off names (typos, synonyms, translations), each
+    of which silently created a brand new stray category via
+    get_or_create_category - an enum makes that structurally impossible."""
+    return {
+        "type": "STRING",
+        "enum": expense_categories + income_categories,
+        "description": (
+            "Berilgan ro'yxatdagi kategoriyalardan ANIQ bittasi - ro'yxatda yo'q boshqa nom yozish "
+            "mumkin emas. Chiqim uchun chiqim kategoriyalaridan, kirim uchun kirim kategoriyalaridan "
+            "eng mos kelganini tanla; hech biri to'g'ri kelmasa 'Boshqa xarajat' yoki 'Boshqa daromad'."
+        ),
+    }
 
-_TRANSACTIONS_SCHEMA = {
-    "type": "OBJECT",
-    "properties": {
-        "transactions": {
-            "type": "ARRAY",
-            "description": "Xabardagi har bir alohida xarajat/kirim uchun bitta element",
-            "items": _TRANSACTION_ITEM_SCHEMA,
-        }
-    },
-    "required": ["transactions"],
-}
 
-_EDIT_SCHEMA = {
-    "type": "OBJECT",
-    "properties": {
-        "row_index": {
-            "type": "INTEGER",
-            "description": "Foydalanuvchi tuzatishni so'rayotgan qatorning raqami (ro'yxatda 1 dan boshlanadi)",
-        },
-        "type": {"type": "STRING", "enum": ["income", "expense"]},
-        "amount": {"type": "NUMBER", "description": "Qatorning (tuzatilgandan keyingi) umumiy summasi"},
-        "category": {"type": "STRING"},
-        "description": {"type": "STRING"},
-        "quantity": {"type": "NUMBER"},
-        "unit": {"type": "STRING"},
-        "unit_price": {"type": "NUMBER"},
-        "confidence": {
-            "type": "STRING",
-            "enum": ["high", "low"],
-            "description": "Qaysi qatorni va nimani o'zgartirish kerakligi aniq bo'lmasa 'low'",
-        },
-    },
-    "required": ["row_index", "type", "amount", "category", "description", "confidence"],
-}
-
-_BANK_ROWS_SCHEMA = {
-    "type": "OBJECT",
-    "properties": {
-        "results": {
-            "type": "ARRAY",
-            "items": {
-                "type": "OBJECT",
-                "properties": {
-                    "row_index": {"type": "INTEGER"},
-                    "category": {"type": "STRING"},
-                    "description": {"type": "STRING"},
-                },
-                "required": ["row_index", "category", "description"],
+def _build_transaction_item_schema(expense_categories: list[str], income_categories: list[str]) -> dict:
+    return {
+        "type": "OBJECT",
+        "properties": {
+            "type": {
+                "type": "STRING",
+                "enum": ["income", "expense"],
+                "description": "income = kirim (pul kelishi), expense = chiqim (xarajat)",
             },
-        }
-    },
-    "required": ["results"],
-}
+            "amount": {
+                "type": "NUMBER",
+                "description": "Summasi (faqat raqam, valyuta belgisisiz), so'mda",
+            },
+            "category": _category_field(expense_categories, income_categories),
+            "description": {
+                "type": "STRING",
+                "description": "Qisqa tavsif (nima uchun to'lov/kirim)",
+            },
+            "counterparty": {
+                "type": "STRING",
+                "description": "To'lov qilingan/qabul qilingan tomon (agar mavjud bo'lsa), aks holda bo'sh qatr",
+            },
+            "occurred_on": {
+                "type": "STRING",
+                "description": "Sana YYYY-MM-DD formatida. Agar matnda sana ko'rsatilmagan bo'lsa, berilgan bugungi sanani ishlating.",
+            },
+            "quantity": {
+                "type": "NUMBER",
+                "description": "Agar matnda miqdor (masalan '10 litr', '5 qop') ko'rsatilgan bo'lsa shu son, aks holda 0",
+            },
+            "unit": {
+                "type": "STRING",
+                "description": (
+                    "Miqdor birligi. Iloji boricha shu standart birliklardan birini ishlat: "
+                    "'litr', 'kg', 'm' (chiziqli metr), 'm2', 'm3', 'dona', 'kun', 'qop', 'tonna'. "
+                    "Agar matnda miqdor bor-u lekin birlik so'z bilan aytilmagan bo'lsa ham, xarajat "
+                    "nima ekanini tahlil qilib eng mos birlikni o'zing tanla (masalan qurilish "
+                    "materiallari - odatda 'dona' yoki 'qop', yoqilg'i/bo'yoq/suyuqlik - 'litr', "
+                    "sement/qum kabi ommaviy materiallar - 'qop' yoki 'tonna', ish haqi/xizmat - "
+                    "'kun'). Faqat miqdorning o'zi ham noaniq/ko'rsatilmagan bo'lsagina bo'sh qator qo'y."
+                ),
+            },
+            "unit_price": {
+                "type": "NUMBER",
+                "description": (
+                    "Bitta birlik narxi (so'mda). Agar matnda to'g'ridan-to'g'ri aytilgan bo'lsa shuni "
+                    "ishlat. Agar aytilmagan bo'lsa-yu, miqdor va umumiy summa ma'lum bo'lsa, "
+                    "umumiy summani miqdorga bo'lib hisobla. Miqdorning o'zi noma'lum bo'lsa 0 qo'y."
+                ),
+            },
+            "payment_type": {
+                "type": "STRING",
+                "enum": ["naqd", "bank"],
+                "description": "To'lov turi: naqd pul yoki bank orqali. Matnda ko'rsatilmagan bo'lsa 'naqd' deb ol.",
+            },
+            "confidence": {
+                "type": "STRING",
+                "enum": ["high", "low"],
+                "description": "Agar matn tushunarsiz yoki summa aniq bo'lmasa 'low', aks holda 'high'",
+            },
+        },
+        "required": ["type", "amount", "category", "description", "occurred_on", "confidence"],
+    }
+
+
+def _build_transactions_schema(expense_categories: list[str], income_categories: list[str]) -> dict:
+    return {
+        "type": "OBJECT",
+        "properties": {
+            "transactions": {
+                "type": "ARRAY",
+                "description": "Xabardagi/rasmdagi har bir alohida xarajat/kirim uchun bitta element",
+                "items": _build_transaction_item_schema(expense_categories, income_categories),
+            }
+        },
+        "required": ["transactions"],
+    }
+
+
+def _build_edit_schema(expense_categories: list[str], income_categories: list[str]) -> dict:
+    return {
+        "type": "OBJECT",
+        "properties": {
+            "row_index": {
+                "type": "INTEGER",
+                "description": "Foydalanuvchi tuzatishni so'rayotgan qatorning raqami (ro'yxatda 1 dan boshlanadi)",
+            },
+            "type": {"type": "STRING", "enum": ["income", "expense"]},
+            "amount": {"type": "NUMBER", "description": "Qatorning (tuzatilgandan keyingi) umumiy summasi"},
+            "category": _category_field(expense_categories, income_categories),
+            "description": {"type": "STRING"},
+            "quantity": {"type": "NUMBER"},
+            "unit": {"type": "STRING"},
+            "unit_price": {"type": "NUMBER"},
+            "confidence": {
+                "type": "STRING",
+                "enum": ["high", "low"],
+                "description": "Qaysi qatorni va nimani o'zgartirish kerakligi aniq bo'lmasa 'low'",
+            },
+        },
+        "required": ["row_index", "type", "amount", "category", "description", "confidence"],
+    }
+
+
+def _build_bank_rows_schema(expense_categories: list[str], income_categories: list[str]) -> dict:
+    return {
+        "type": "OBJECT",
+        "properties": {
+            "results": {
+                "type": "ARRAY",
+                "items": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "row_index": {"type": "INTEGER"},
+                        "category": _category_field(expense_categories, income_categories),
+                        "description": {"type": "STRING"},
+                    },
+                    "required": ["row_index", "category", "description"],
+                },
+            }
+        },
+        "required": ["results"],
+    }
 
 
 async def _generate_json_gemini(parts: list[dict[str, Any]], schema: dict[str, Any], model: str | None = None) -> dict:
@@ -141,6 +162,10 @@ async def _generate_json_gemini(parts: list[dict[str, Any]], schema: dict[str, A
         "generationConfig": {
             "response_mime_type": "application/json",
             "response_schema": schema,
+            # Explicit headroom so a long multi-row table's JSON response
+            # can't get silently truncated mid-array (default limits vary
+            # by model and a 30+ row table can need several thousand tokens).
+            "maxOutputTokens": 16384,
         },
     }
     async with aiohttp.ClientSession() as session:
@@ -273,7 +298,8 @@ async def parse_expense_text(
         f"Quyidagi xabarni tahlil qil:\n"
         f'"{text}"'
     )
-    result = await _generate_json([{"text": prompt}], _TRANSACTIONS_SCHEMA)
+    schema = _build_transactions_schema(expense_categories, income_categories)
+    result = await _generate_json([{"text": prompt}], schema)
     return result["transactions"]
 
 
@@ -318,7 +344,8 @@ async def parse_receipt_image(
         {"inline_data": {"mime_type": media_type, "data": b64_image}},
         {"text": prompt},
     ]
-    result = await _generate_json(parts, _TRANSACTIONS_SCHEMA, model=settings.gemini_vision_model)
+    schema = _build_transactions_schema(expense_categories, income_categories)
+    result = await _generate_json(parts, schema, model=settings.gemini_vision_model)
     return result["transactions"]
 
 
@@ -335,7 +362,8 @@ async def categorize_bank_rows(
         "va qisqa tushunarli tavsifni tanla:\n\n"
         f"{json.dumps(rows, ensure_ascii=False)}"
     )
-    parsed = await _generate_json([{"text": prompt}], _BANK_ROWS_SCHEMA)
+    schema = _build_bank_rows_schema(expense_categories, income_categories)
+    parsed = await _generate_json([{"text": prompt}], schema)
     return {item["row_index"]: item for item in parsed["results"]}
 
 
@@ -360,5 +388,6 @@ async def parse_daftar_edit(
         "o'zgartir, boshqa barcha maydonlarni ro'yxatda ko'rsatilgan joriy qiymati bilan bir xil qoldir. "
         "Agar qaysi qator yoki nima o'zgarishi noaniq bo'lsa, confidence='low' qo'y."
     )
-    result = await _generate_json([{"text": prompt}], _EDIT_SCHEMA)
+    schema = _build_edit_schema(expense_categories, income_categories)
+    result = await _generate_json([{"text": prompt}], schema)
     return result

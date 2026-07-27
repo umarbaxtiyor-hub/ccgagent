@@ -78,13 +78,19 @@ def _build_table(items: list[tuple[str, float, str, float, str]]) -> list[str]:
     return table_lines
 
 
-def _project_header(project_name: str, reporter_name: str) -> str:
-    return f"📋 LOYIHA: {h(project_name)}\n👤 XODIM: {h(reporter_name)}"
-
-
-def _date_block(date_str: str, items: list[tuple[str, float, str, float, str]]) -> str:
-    table = "<pre>" + "\n".join(_build_table(items)) + "</pre>"
-    return f"📅 SANA: {date_str}\n" + table
+def _daftar_pre_table(
+    project_name: str, reporter_name: str, date_str: str, items: list[tuple[str, float, str, float, str]]
+) -> str:
+    """LOYIHA/XODIM/SANA are inside the <pre> block (not above it) so that
+    Telegram's tap-to-copy on the block also copies who/which project this
+    table belongs to - copying just the table used to lose that context."""
+    header_lines = [
+        f"LOYIHA: {h(project_name)}",
+        f"XODIM: {h(reporter_name)}",
+        f"SANA: {date_str}",
+        "",
+    ]
+    return "<pre>" + "\n".join(header_lines + _build_table(items)) + "</pre>"
 
 
 def _short_amount(amount: float) -> str:
@@ -177,9 +183,11 @@ def format_day_review(transactions: list[Transaction]) -> str:
                 )
                 for t in by_date[occurred_on]
             ]
-            date_blocks.append(_date_block(occurred_on.strftime("%d.%m.%Y"), table_items))
+            date_blocks.append(
+                _daftar_pre_table(project_name, reporter_name, occurred_on.strftime("%d.%m.%Y"), table_items)
+            )
 
-        sections.append(_project_header(project_name, reporter_name) + "\n\n" + "\n\n".join(date_blocks))
+        sections.append("\n\n".join(date_blocks))
 
     return "\n\n".join(sections)
 

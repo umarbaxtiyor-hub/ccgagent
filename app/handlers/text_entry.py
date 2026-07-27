@@ -54,7 +54,7 @@ async def handle_text_entry(message: Message) -> None:
             await status_msg.edit_text(result)
             return
 
-        items, tx_ids = result
+        items, tx_ids, skipped_count = result
         project_name = user.current_project.name if user.current_project else "-"
         reporter_name = user.full_name or user.username or "Xodim"
 
@@ -69,7 +69,7 @@ async def handle_text_entry(message: Message) -> None:
         # even though the new items were already saved as unconfirmed.
         count = await count_unconfirmed(session, user.id)
         ack = await message.answer(
-            format_ack_table(items, project_name, reporter_name),
+            format_ack_table(items, project_name, reporter_name, skipped_count),
             reply_markup=daftar_reply_keyboard(count),
         )
         for tx in txs:
@@ -118,7 +118,7 @@ async def handle_text_edit(message: Message) -> None:
                     logger.exception("Failed to update ack message after edit")
             return
 
-        items, tx_ids = result
+        items, tx_ids, skipped_count = result
         project_name = user.current_project.name if user.current_project else "-"
         reporter_name = user.full_name or user.username or "Xodim"
 
@@ -135,7 +135,7 @@ async def handle_text_edit(message: Message) -> None:
         await message.bot.edit_message_text(
             chat_id=message.chat.id,
             message_id=ack_message_id,
-            text=format_ack_table(items, project_name, reporter_name),
+            text=format_ack_table(items, project_name, reporter_name, skipped_count),
         )
     except Exception:
         logger.exception("Failed to update ack message after edit")

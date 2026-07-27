@@ -108,8 +108,9 @@ async def _process_receipt_image(message: Message, image_bytes: bytes, media_typ
         reporter_name = user.full_name or user.username or "Xodim"
         count = await count_unconfirmed(session, user.id)
 
+    skipped_count = len(parsed_items) - len(valid_items)
     await status_msg.delete()
     await message.answer(
-        format_ack_table(valid_items, project_name, reporter_name),
+        format_ack_table(valid_items, project_name, reporter_name, skipped_count),
         reply_markup=daftar_reply_keyboard(count),
     )

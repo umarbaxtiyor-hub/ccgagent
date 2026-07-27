@@ -66,13 +66,13 @@ async def handle_voice(message: Message) -> None:
             await status_msg.edit_text(prefix + result)
             return
 
-        items, _tx_ids = result
+        items, _tx_ids, skipped_count = result
         project_name = user.current_project.name if user.current_project else "-"
         reporter_name = user.full_name or user.username or "Xodim"
         count = await count_unconfirmed(session, user.id)
 
     await status_msg.delete()
     await message.answer(
-        prefix + format_ack_table(items, project_name, reporter_name),
+        prefix + format_ack_table(items, project_name, reporter_name, skipped_count),
         reply_markup=daftar_reply_keyboard(count),
     )

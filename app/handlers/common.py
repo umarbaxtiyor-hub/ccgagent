@@ -43,13 +43,13 @@ async def require_project(session: AsyncSession, message: Message, user: User) -
 
 async def parse_and_save_transactions(
     session: AsyncSession, user: User, text: str, source: str, source_message_id: int | None = None
-) -> tuple[list[dict], list[int]] | str:
+) -> tuple[list[dict], list[int], int] | str:
     """Parses text and immediately persists each valid item as an unconfirmed
     Transaction (no per-message tap-confirm) - the user reviews and confirms
     everything at once later via /daftar.
 
-    Returns (parsed dicts, created transaction ids) on success, or an error
-    message string on failure/low confidence.
+    Returns (parsed dicts, created transaction ids, skipped-low-confidence
+    count) on success, or an error message string on failure/all-low-confidence.
     """
     expense_cats = await category_names(session, TransactionType.expense)
     income_cats = await category_names(session, TransactionType.income)
@@ -114,4 +114,5 @@ async def parse_and_save_transactions(
         logger.exception("Failed to save parsed transactions for text=%r", text)
         await session.rollback()
         return "Kechirasiz, ma'lumotni saqlashda xatolik yuz berdi. Iltimos, qayta urinib ko'ring."
-    return valid_items, tx_ids
+    skipped_count = len(parsed_items) - len(valid_items)
+    return valid_items, tx_ids, skipped_count

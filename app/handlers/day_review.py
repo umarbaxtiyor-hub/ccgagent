@@ -211,7 +211,9 @@ def format_day_review(transactions: list[Transaction]) -> str:
     return "\n\n".join(sections)
 
 
-def format_ack_table(items: list[dict], project_name: str, reporter_name: str) -> str:
+def format_ack_table(
+    items: list[dict], project_name: str, reporter_name: str, skipped_count: int = 0
+) -> str:
     """Short plain acknowledgement shown right after a message is parsed -
     it already lands in /daftar automatically, so this is just a quick
     confirmation of what was understood, not a call to action."""
@@ -227,7 +229,13 @@ def format_ack_table(items: list[dict], project_name: str, reporter_name: str) -
         total += -amount if p["type"] == "expense" else amount
         lines.append(f"• {name}{qty_part} — {sign}{_fmt_amount(amount)} so'm")
     total_line = f"Jami: {_fmt_amount(total)} so'm"
-    return "✅ Qabul qilindi (tasdiqlash kutilmoqda)\n\n" + "\n".join(lines) + f"\n\n{total_line}"
+    text = "✅ Qabul qilindi (tasdiqlash kutilmoqda)\n\n" + "\n".join(lines) + f"\n\n{total_line}"
+    if skipped_count:
+        text += (
+            f"\n\n⚠️ Yana {skipped_count} ta band aniq bo'lmagani uchun o'tkazib yuborildi - "
+            "iltimos, o'sha qism(lar)ni alohida, aniqroq qayta yozing."
+        )
+    return text
 
 
 async def _unconfirmed_for_user(session: AsyncSession, user_id: int) -> list[Transaction]:

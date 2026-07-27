@@ -134,8 +134,8 @@ _BANK_ROWS_SCHEMA = {
 }
 
 
-async def _generate_json_gemini(parts: list[dict[str, Any]], schema: dict[str, Any]) -> dict:
-    url = _GEMINI_API_URL.format(model=settings.gemini_model)
+async def _generate_json_gemini(parts: list[dict[str, Any]], schema: dict[str, Any], model: str | None = None) -> dict:
+    url = _GEMINI_API_URL.format(model=model or settings.gemini_model)
     payload = {
         "contents": [{"role": "user", "parts": parts}],
         "generationConfig": {
@@ -234,12 +234,12 @@ async def _generate_json_openai(parts: list[dict[str, Any]], schema: dict[str, A
     return json.loads(text)
 
 
-async def _generate_json(parts: list[dict[str, Any]], schema: dict[str, Any]) -> dict:
+async def _generate_json(parts: list[dict[str, Any]], schema: dict[str, Any], model: str | None = None) -> dict:
     """Tries Gemini first; if it fails (quota, rate-limit, network, etc.) and
     an OpenAI key is configured, transparently retries via OpenAI so a single
     provider's outage/quota doesn't take the bot down."""
     try:
-        return await _generate_json_gemini(parts, schema)
+        return await _generate_json_gemini(parts, schema, model)
     except Exception as gemini_error:
         if not settings.openai_api_key:
             raise
@@ -289,18 +289,31 @@ async def parse_receipt_image(
         f"Bugungi sana: {today.isoformat()}\n"
         f"Chiqim kategoriyalari: {', '.join(expense_categories)}\n"
         f"Kirim kategoriyalari: {', '.join(income_categories)}\n\n"
-        "Bu rasm - chek, kvitansiya yoki qo'lda yozilgan xarid ro'yxati. Undan summani, sanani va "
-        "nimaga sarflanganini aniqla. Rasmda bir nechta alohida band (mahsulot/xarid qatori) bo'lishi "
-        "mumkin - masalan har bir qatorda alohida nom, miqdor va narx ko'rsatilgan bo'lishi mumkin. "
-        "Bunday holda HAR BIR bandni alohida element sifatida qaytar, birinchisini emas - hammasini. "
-        "Agar rasmda faqat bitta band bo'lsa, bitta elementli ro'yxat qaytar. Agar chekdagi sana "
-        "o'qib bo'lmasa, bugungi sanani ishlat."
+        "Bu rasm - chek, kvitansiya, qo'lda yozilgan xarid ro'yxati yoki jadval (masalan Excel "
+        "skrinshoti) bo'lishi mumkin. Rasmda ko'p qatorli jadval bo'lsa (nomi, birlik, miqdor, summa "
+        "kabi ustunlar bilan), quyidagilarga QATIY rioya qil:\n"
+        "1. Avval jadvalda nechta qator borligini o'zing uchun sanab chiq.\n"
+        "2. Har bir qatorni CHAP TOMONDAN O'NGGA, yuqoridan pastga, ustunlar bo'yicha ALOHIDA-ALOHIDA "
+        "o'qi: nomi, miqdori, birligi va summasi FAQAT O'SHA BIR QATORNING o'zidan olinishi kerak - "
+        "hech qachon bitta qatorning nomini boshqa (masalan keyingi yoki oldingi) qatorning miqdori, "
+        "birligi yoki summasi bilan aralashtirma. Bu eng ko'p uchraydigan xato: rasmda ko'p qator "
+        "bo'lganda, bitta qatorni o'qib o'tkazib yuborsang yoki noto'g'ri tushunsang, undan keyingi "
+        "BARCHA qatorlar bir pog'ona siljib, nomi bilan summasi mos kelmay qoladi - shuning uchun "
+        "har bir qatorni alohida tekshirib, siljishga yo'l qo'yma.\n"
+        "3. Agar biror qatorni aniq o'qiy olmasang (xira, qisman ko'rinmayapti va h.k.), o'sha bitta "
+        "qatorni butunlay TASHLAB KET (natijaga qo'shma), lekin qolgan barcha qatorlarni to'g'ri "
+        "tartibda, siljitmasdan davom ettir - taxmin qilib noto'g'ri raqam yozgandan ko'ra qatorni "
+        "o'tkazib yuborish yaxshiroq.\n"
+        "4. Oxirida javobingizdagi elementlar soni jadvaldagi (o'qib bo'lgan) qatorlar soniga mos "
+        "kelishini o'zing tekshirib chiq.\n\n"
+        "Agar rasmda faqat bitta band bo'lsa, bitta elementli ro'yxat qaytar. Agar chekdagi/jadvaldagi "
+        "sana o'qib bo'lmasa, bugungi sanani ishlat."
     )
     parts = [
         {"inline_data": {"mime_type": media_type, "data": b64_image}},
         {"text": prompt},
     ]
-    result = await _generate_json(parts, _TRANSACTIONS_SCHEMA)
+    result = await _generate_json(parts, _TRANSACTIONS_SCHEMA, model=settings.gemini_vision_model)
     return result["transactions"]
 
 

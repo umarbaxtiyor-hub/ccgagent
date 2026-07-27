@@ -113,7 +113,12 @@ bering (quyida 2-band).
    - `GEMINI_MODEL` (ixtiyoriy, standart: `gemini-2.0-flash-lite` — bepul kvotasi
      `gemini-flash-latest`/`gemini-2.5-flash`ga qaraganda ancha yuqori, shuning
      uchun tez-tez 429 "quota exceeded" xatosiga duch kelmaslik uchun shu
-     model tanlangan)
+     model tanlangan). Faqat matn xabarlarni tahlil qilishda ishlatiladi.
+   - `GEMINI_VISION_MODEL` (ixtiyoriy, standart: `gemini-2.5-flash`) — chek/
+     jadval rasmlarini tahlil qilishda ishlatiladi. Rasmdagi ko'p qatorli
+     jadvallarni aniq o'qish `flash-lite`dan ko'ra kuchliroq model talab
+     qiladi, shuning uchun rasm tahlili uchun alohida, kuchliroq model
+     tanlangan (matn tahlilidan farqli, chunki rasm kamroq yuboriladi).
    - `OPENAI_API_KEY` (ixtiyoriy — Gemini xato bersa (masalan kvota tugasa),
      bot avtomatik shu bilan tahlil qilishga o'tadi, shuning uchun ikkala
      xizmat ham to'xtab qolmaguncha bot ishlashda davom etadi)

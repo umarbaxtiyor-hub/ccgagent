@@ -63,13 +63,18 @@ def _build_transaction_item_schema(expense_categories: list[str], income_categor
             "unit": {
                 "type": "STRING",
                 "description": (
-                    "Miqdor birligi. Iloji boricha shu standart birliklardan birini ishlat: "
-                    "'litr', 'kg', 'm' (chiziqli metr), 'm2', 'm3', 'dona', 'kun', 'qop', 'tonna'. "
-                    "Agar matnda miqdor bor-u lekin birlik so'z bilan aytilmagan bo'lsa ham, xarajat "
-                    "nima ekanini tahlil qilib eng mos birlikni o'zing tanla (masalan qurilish "
-                    "materiallari - odatda 'dona' yoki 'qop', yoqilg'i/bo'yoq/suyuqlik - 'litr', "
-                    "sement/qum kabi ommaviy materiallar - 'qop' yoki 'tonna', ish haqi/xizmat - "
-                    "'kun'). Faqat miqdorning o'zi ham noaniq/ko'rsatilmagan bo'lsagina bo'sh qator qo'y."
+                    "Miqdor birligi. ENG MUHIMI: agar manba matnda/jadvalda/rasmda birlik ALOHIDA "
+                    "USTUN yoki so'z sifatida ANIQ ko'rsatilgan bo'lsa (masalan jadvalning 'Едины-измер' "
+                    "yoki shunga o'xshash ustunida 'DONA', 'KUN', 'M', 'KG' kabi yozilgan bo'lsa), "
+                    "O'SHA QIYMATNI AYNAN OLIB YOZ - o'zingcha boshqacha birlik bilan almashtirma yoki "
+                    "'balki bu kun/xizmatga o'xshaydi' deb qayta talqin qilma, hatto nom xarajat turiga "
+                    "boshqacharoq mos kelayotgandek tuyulsa ham. Faqat birlik HECH QAYERDA aniq "
+                    "ko'rsatilmagan bo'lsagina, quyidagi standart birliklardan birini o'zing tanla: "
+                    "'litr', 'kg', 'm' (chiziqli metr), 'm2', 'm3', 'dona', 'kun', 'qop', 'tonna' "
+                    "(masalan qurilish materiallari - odatda 'dona' yoki 'qop', yoqilg'i/bo'yoq/"
+                    "suyuqlik - 'litr', sement/qum kabi ommaviy materiallar - 'qop' yoki 'tonna', "
+                    "ish haqi/xizmat - 'kun'). Faqat miqdorning o'zi ham noaniq/ko'rsatilmagan "
+                    "bo'lsagina bo'sh qator qo'y."
                 ),
             },
             "unit_price": {

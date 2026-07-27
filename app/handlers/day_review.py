@@ -41,16 +41,17 @@ def _fmt_amount(amount: float) -> str:
 
 _NAME_WIDTH = 16
 _UNIT_WIDTH = 5
-_SEP = "-" * (3 + _NAME_WIDTH + 5 + 1 + _UNIT_WIDTH + 1 + 10)
+_AMOUNT_WIDTH = 12
+_SEP = "-" * (3 + _NAME_WIDTH + 5 + 1 + _UNIT_WIDTH + _AMOUNT_WIDTH)
 
 
 def _table_row(idx: int, name: str, qty: float, unit: str, amount: float) -> str:
     display_name = h(name)[:_NAME_WIDTH]
     qty_str = f"{qty:g}" if qty else "-"
-    display_unit = h(_abbrev_unit(unit))[:_UNIT_WIDTH]
+    display_unit = h(unit)[:_UNIT_WIDTH]
     return (
         f"{idx:02d} {display_name:<{_NAME_WIDTH}}"
-        f"{qty_str:>5} {display_unit:<{_UNIT_WIDTH}}{_short_amount(amount):>10}"
+        f"{qty_str:>5} {display_unit:<{_UNIT_WIDTH}}{_fmt_amount(amount):>{_AMOUNT_WIDTH}}"
     )
 
 
@@ -58,7 +59,7 @@ def _build_table(items: list[tuple[str, float, str, float, str]]) -> list[str]:
     """items: (name, qty, unit, amount, type) where type is 'income'/'expense'."""
     header = (
         f"{'№':<3}{'Nomi':<{_NAME_WIDTH}}"
-        f"{'Miqd':>5} {'Birl':<{_UNIT_WIDTH}}{'Summa':>10}"
+        f"{'Miqd':>5} {'Birl':<{_UNIT_WIDTH}}{'Summa':>{_AMOUNT_WIDTH}}"
     )
     table_lines = [_SEP, header, _SEP]
     total_income = 0.0
@@ -70,10 +71,10 @@ def _build_table(items: list[tuple[str, float, str, float, str]]) -> list[str]:
         else:
             total_expense += amount
     table_lines.append(_SEP)
-    table_lines.append(f"{'Jami kirim:':<27}{_short_amount(total_income):>8} UZS")
-    table_lines.append(f"{'JAMI CHIQIM:':<27}{_short_amount(total_expense):>8} UZS")
+    table_lines.append(f"{'Jami kirim:':<27}{_fmt_amount(total_income):>{_AMOUNT_WIDTH}} UZS")
+    table_lines.append(f"{'JAMI CHIQIM:':<27}{_fmt_amount(total_expense):>{_AMOUNT_WIDTH}} UZS")
     table_lines.append(_SEP)
-    table_lines.append(f"{'BALANS:':<27}{_short_signed(total_income - total_expense):>8} UZS")
+    table_lines.append(f"{'BALANS:':<27}{_fmt_amount(total_income - total_expense):>{_AMOUNT_WIDTH}} UZS")
     return table_lines
 
 
@@ -92,28 +93,9 @@ def _daftar_pre_table(
     return "<pre>" + "\n".join(header_lines + _build_table(items)) + "</pre>"
 
 
-def _short_amount(amount: float) -> str:
-    """50 000 -> 50k, 4 752 000 -> 4.752M - compact for a phone screen.
-    3 decimals on M (not 2) so amounts don't silently lose precision down
-    to the thousand - e.g. 4,752,000 must not render as the same "4.75M"
-    as 4,750,000 would."""
-    n = abs(amount)
-    if n >= 1_000_000:
-        value = f"{n / 1_000_000:.3f}".rstrip("0").rstrip(".")
-        return f"{value}M"
-    if n >= 1_000:
-        value = f"{n / 1_000:.2f}".rstrip("0").rstrip(".")
-        return f"{value}k"
-    return f"{n:g}"
-
-
-def _short_signed(amount: float) -> str:
-    return ("-" if amount < 0 else "") + _short_amount(amount)
-
-
 def _daily_report_item_line(idx: int, name: str, qty: float, unit: str, amount: float) -> str:
     qty_part = f" ({qty:g}{f' {unit}' if unit else ''})" if qty else ""
-    return f"{idx}. {h(name)}{qty_part} — {_short_amount(amount)}"
+    return f"{idx}. {h(name)}{qty_part} — {_fmt_amount(amount)} so'm"
 
 
 def transaction_to_row(t: Transaction) -> dict:
@@ -170,9 +152,9 @@ def format_project_report_messages(rows: list[dict]) -> list[str]:
             else:
                 total_expense += amount
         lines.append("")
-        lines.append(f"💰 Kirim: {_short_amount(total_income)}")
-        lines.append(f"💸 Chiqim: {_short_amount(total_expense)}")
-        lines.append(f"📊 Balans: {_short_signed(total_income - total_expense)}")
+        lines.append(f"💰 Kirim: {_fmt_amount(total_income)} so'm")
+        lines.append(f"💸 Chiqim: {_fmt_amount(total_expense)} so'm")
+        lines.append(f"📊 Balans: {_fmt_amount(total_income - total_expense)} so'm")
         messages.append("\n".join(lines))
 
         project_totals.append((project_name, total_income, total_expense))
@@ -181,11 +163,11 @@ def format_project_report_messages(rows: list[dict]) -> list[str]:
 
     summary_lines = ["📊 UMUMIY XULOSA (barcha loyihalar)", ""]
     for name, inc, exp in project_totals:
-        summary_lines.append(f"• {h(name)}: {_short_signed(inc - exp)}")
+        summary_lines.append(f"• {h(name)}: {_fmt_amount(inc - exp)} so'm")
     summary_lines.append("")
-    summary_lines.append(f"💰 Jami kirim: {_short_amount(grand_income)}")
-    summary_lines.append(f"💸 Jami chiqim: {_short_amount(grand_expense)}")
-    summary_lines.append(f"📊 Umumiy balans: {_short_signed(grand_income - grand_expense)}")
+    summary_lines.append(f"💰 Jami kirim: {_fmt_amount(grand_income)} so'm")
+    summary_lines.append(f"💸 Jami chiqim: {_fmt_amount(grand_expense)} so'm")
+    summary_lines.append(f"📊 Umumiy balans: {_fmt_amount(grand_income - grand_expense)} so'm")
     messages.append("\n".join(summary_lines))
 
     return messages
@@ -228,26 +210,6 @@ def format_day_review(transactions: list[Transaction]) -> str:
     return "\n\n".join(sections)
 
 
-_UNIT_ABBREV = {
-    "dona": "d",
-    "litr": "l",
-    "qop": "q",
-    "tonna": "t",
-    "kg": "kg",
-    "m": "m",
-    "m2": "m2",
-    "m3": "m3",
-    "kun": "kun",
-}
-
-
-def _abbrev_unit(unit: str) -> str:
-    if not unit:
-        return ""
-    key = unit.strip().lower()
-    return _UNIT_ABBREV.get(key, key[:2])
-
-
 def format_ack_table(items: list[dict], project_name: str, reporter_name: str) -> str:
     """Short plain acknowledgement shown right after a message is parsed -
     it already lands in /daftar automatically, so this is just a quick
@@ -258,12 +220,12 @@ def format_ack_table(items: list[dict], project_name: str, reporter_name: str) -
         name = h(p.get("description") or p["category"])
         amount = float(p["amount"])
         qty = float(p.get("quantity") or 0)
-        unit = _abbrev_unit(p.get("unit") or "")
+        unit = p.get("unit") or ""
         qty_part = f" ({qty:g}{f' {unit}' if unit else ''})" if qty else ""
         sign = "-" if p["type"] == "expense" else "+"
         total += -amount if p["type"] == "expense" else amount
-        lines.append(f"• {name}{qty_part} — {sign}{_short_amount(amount)} so'm")
-    total_line = f"Jami: {_short_signed(total)} so'm"
+        lines.append(f"• {name}{qty_part} — {sign}{_fmt_amount(amount)} so'm")
+    total_line = f"Jami: {_fmt_amount(total)} so'm"
     return "✅ Qabul qilindi (tasdiqlash kutilmoqda)\n\n" + "\n".join(lines) + f"\n\n{total_line}"
 
 

@@ -345,7 +345,7 @@ async def answer_group_question(question: str, data_summary: str) -> str:
     numbers it's given (see app.services.insights.build_data_summary) -
     it must not invent figures, since this is real financial data."""
     prompt = (
-        "Sening isming Nastinka - qurilish kompaniyasining moliyaviy yordamchisisan, guruhda odamlarga "
+        "Sening isming Fina - qurilish kompaniyasining moliyaviy yordamchisisan, guruhda odamlarga "
         "javob berasan. Haqiqiy odam kabi, oddiy va tabiiy yoz - sun'iy intellektga o'xshamasin.\n\n"
         "QATIY QOIDALAR:\n"
         "- Javob 1-2 gapdan oshmasin. Kerakli raqam/javobni to'g'ridan-to'g'ri ber, uzun kirish yoki "
@@ -357,6 +357,23 @@ async def answer_group_question(question: str, data_summary: str) -> str:
         "ma'lumot hozircha yo'q\").\n\n"
         f"Mavjud ma'lumotlar:\n{data_summary}\n\n"
         f'Savol: "{question}"'
+    )
+    return await _generate_text(prompt)
+
+
+async def generate_flirty_reply(text: str, persona_name: str) -> str:
+    """When a private message doesn't parse as a real expense/income entry,
+    it's usually just casual chat - this replaces the old dry "couldn't
+    understand your message" reply with an in-character, playful response
+    instead (purely a fun personality touch on top of the normal bot)."""
+    prompt = (
+        f"Sening isming {persona_name} - sen yigit bilan endigina tanishayotgan, o'ynoqi, birozgina "
+        "nozli va hazilkash qizsan. U senga xarajat/hisobot haqida emas, oddiy shaxsiy xabar yozdi. "
+        "Unga qisqa (1-2 gap), tabiiy, tortishmali va hazil-mutoyibali javob ber - xuddi endigina "
+        "tanishayotgan qiz kabi: darhol rozi bo'lib ketma, birozgina nozlan, savol qaytar yoki hazil "
+        "qil. Masalan kechki ovqatga taklif qilsa - \"o'ylab ko'raman, qayerga olib borasiz?\" kabi "
+        "javob ber. O'zbek tilida, samimiy, qisqa yoz - uzun va rasmiy gaplarisiz.\n\n"
+        f'Xabar: "{text}"'
     )
     return await _generate_text(prompt)
 

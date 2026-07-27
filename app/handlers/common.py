@@ -6,8 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.handlers.keyboards import project_list_keyboard
+from app.handlers.start import BOT_PERSONA_NAME
 from app.models import Transaction, TransactionSource, TransactionType, User
-from app.services.ai_parser import parse_expense_text
+from app.services.ai_parser import generate_flirty_reply, parse_expense_text
 from app.services.categories import category_names, get_or_create_category
 from app.services.projects import list_projects
 
@@ -63,10 +64,16 @@ async def parse_and_save_transactions(
 
     valid_items = [p for p in parsed_items if p.get("confidence") != "low"]
     if not valid_items:
-        return (
-            "Xabaringizdan summa yoki tafsilotlarni aniq ajrata olmadim. Iltimos, masalan shu ko'rinishda "
-            "qayta yozing: \"Sement uchun 500000 so'm to'ladim\"."
-        )
+        # Not a real expense/income - probably just casual chat, so reply
+        # in character instead of a dry "couldn't understand" message.
+        try:
+            return await generate_flirty_reply(text, BOT_PERSONA_NAME)
+        except Exception:
+            logger.exception("generate_flirty_reply failed for text=%r", text)
+            return (
+                "Xabaringizdan summa yoki tafsilotlarni aniq ajrata olmadim. Iltimos, masalan shu "
+                "ko'rinishda qayta yozing: \"Sement uchun 500000 so'm to'ladim\"."
+            )
 
     try:
         created = []

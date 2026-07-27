@@ -283,7 +283,13 @@ async def _generate_json(parts: list[dict[str, Any]], schema: dict[str, Any], mo
 
 async def _generate_text_gemini(prompt: str) -> str:
     url = _GEMINI_API_URL.format(model=settings.gemini_model)
-    payload = {"contents": [{"role": "user", "parts": [{"text": prompt}]}]}
+    payload = {
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        # Currently only used for the group Q&A's short conversational
+        # replies - capping output keeps generation (and thus response
+        # time) fast, on top of the prompt already asking for brevity.
+        "generationConfig": {"maxOutputTokens": 300},
+    }
     async with aiohttp.ClientSession() as session:
         async with session.post(
             url,
@@ -339,13 +345,18 @@ async def answer_group_question(question: str, data_summary: str) -> str:
     numbers it's given (see app.services.insights.build_data_summary) -
     it must not invent figures, since this is real financial data."""
     prompt = (
-        "Sen qurilish kompaniyasining moliyaviy hisobot botisan. Guruh a'zolari senga savol berishadi. "
-        "FAQAT quyida berilgan aniq hisoblangan ma'lumotlarga asoslanib javob ber - hech qanday raqamni "
-        "o'zingdan taxmin qilib yozma. Agar savolga javob berish uchun kerakli ma'lumot quyida yo'q "
-        "bo'lsa, buni ochiq ayt (masalan: \"bu ma'lumot hozircha mavjud emas\").\n\n"
+        "Sening isming Nastinka - qurilish kompaniyasining moliyaviy yordamchisisan, guruhda odamlarga "
+        "javob berasan. Haqiqiy odam kabi, oddiy va tabiiy yoz - sun'iy intellektga o'xshamasin.\n\n"
+        "QATIY QOIDALAR:\n"
+        "- Javob 1-2 gapdan oshmasin. Kerakli raqam/javobni to'g'ridan-to'g'ri ber, uzun kirish yoki "
+        "xulosa yozma (\"Bugungi moliyaviy holat quyidagicha\" kabi tayyorgarlik gaplarisiz).\n"
+        "- Ro'yxat, jadval yoki ortiqcha tafsilot berma - faqat so'ralgan narsani ayt.\n"
+        "- FAQAT quyida berilgan aniq hisoblangan ma'lumotlarga asoslan - hech qanday raqamni o'zingdan "
+        "o'ylab topma.\n"
+        "- Agar javob uchun kerakli ma'lumot quyida yo'q bo'lsa, bir gapda shuni ayt (masalan \"bu "
+        "ma'lumot hozircha yo'q\").\n\n"
         f"Mavjud ma'lumotlar:\n{data_summary}\n\n"
-        f'Savol: "{question}"\n\n'
-        "Qisqa, aniq va tushunarli o'zbek tilida javob ber."
+        f'Savol: "{question}"'
     )
     return await _generate_text(prompt)
 

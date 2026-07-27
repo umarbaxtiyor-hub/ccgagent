@@ -16,7 +16,7 @@ from app.services.users import get_or_create_user
 router = Router()
 logger = logging.getLogger(__name__)
 
-BOT_PERSONA_NAME = "Zarina"
+BOT_PERSONA_NAME = "Nastinka"
 
 HELP_TEXT = (
     "Nima qila olaman:\n"

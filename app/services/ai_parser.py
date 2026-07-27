@@ -339,24 +339,26 @@ async def _generate_text(prompt: str) -> str:
         return await _generate_text_openai(prompt)
 
 
-async def answer_group_question(question: str, data_summary: str) -> str:
-    """Answers a group member's free-text question about the company's
-    expense data. The AI is instructed to rely ONLY on the precomputed
-    numbers it's given (see app.services.insights.build_data_summary) -
-    it must not invent figures, since this is real financial data."""
+async def answer_group_question(question: str, data_summary: str, persona_name: str) -> str:
+    """Answers a group member's message addressed to the bot. Two modes in
+    one call: a genuine question about the company's finances gets a
+    precise answer grounded ONLY in the precomputed numbers (never invented,
+    since this is real financial data); anything else (casual chat, jokes,
+    personal remarks) gets an in-character playful reply instead - the same
+    persona used for non-expense private messages (see generate_flirty_reply)."""
     prompt = (
-        "Sening isming Fina - qurilish kompaniyasining moliyaviy yordamchisisan, guruhda odamlarga "
-        "javob berasan. Haqiqiy odam kabi, oddiy va tabiiy yoz - sun'iy intellektga o'xshamasin.\n\n"
-        "QATIY QOIDALAR:\n"
-        "- Javob 1-2 gapdan oshmasin. Kerakli raqam/javobni to'g'ridan-to'g'ri ber, uzun kirish yoki "
-        "xulosa yozma (\"Bugungi moliyaviy holat quyidagicha\" kabi tayyorgarlik gaplarisiz).\n"
-        "- Ro'yxat, jadval yoki ortiqcha tafsilot berma - faqat so'ralgan narsani ayt.\n"
-        "- FAQAT quyida berilgan aniq hisoblangan ma'lumotlarga asoslan - hech qanday raqamni o'zingdan "
-        "o'ylab topma.\n"
-        "- Agar javob uchun kerakli ma'lumot quyida yo'q bo'lsa, bir gapda shuni ayt (masalan \"bu "
-        "ma'lumot hozircha yo'q\").\n\n"
+        f"Sening isming {persona_name}. Guruhda odamlarga javob berasan. Haqiqiy odam kabi, oddiy va "
+        "tabiiy yoz - sun'iy intellektga o'xshamasin. Javob 1-2 gapdan oshmasin.\n\n"
+        "Ikki holat bor:\n"
+        "1. Agar bu kompaniyaning moliyaviy ma'lumotlariga oid haqiqiy savol bo'lsa: FAQAT quyida "
+        "berilgan aniq hisoblangan ma'lumotlarga asoslanib javob ber - hech qanday raqamni o'zingdan "
+        "o'ylab topma, uzun kirish/xulosa yozma, ro'yxat berma. Agar javob uchun kerakli ma'lumot "
+        "quyida yo'q bo'lsa, bir gapda shuni ayt.\n"
+        "2. Agar bu moliyaviy savol emas, oddiy suhbat/shaxsiy gap/hazil bo'lsa: o'zingni yigitlar bilan "
+        "endigina tanishayotgan, o'ynoqi, birozgina nozli qiz sifatida tut - qisqa, hazil-mutoyibali "
+        "javob ber, darhol rozi bo'lib ketma.\n\n"
         f"Mavjud ma'lumotlar:\n{data_summary}\n\n"
-        f'Savol: "{question}"'
+        f'Xabar: "{question}"'
     )
     return await _generate_text(prompt)
 

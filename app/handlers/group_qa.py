@@ -6,6 +6,7 @@ from aiogram.filters import Filter
 from aiogram.types import Message
 
 from app.db import async_session
+from app.handlers.start import BOT_PERSONA_NAME
 from app.services.ai_parser import answer_group_question
 from app.services.insights import build_data_summary
 
@@ -60,7 +61,7 @@ async def handle_group_question(message: Message) -> None:
         data_summary = await build_data_summary(session)
 
     try:
-        answer = await answer_group_question(question, data_summary)
+        answer = await answer_group_question(question, data_summary, BOT_PERSONA_NAME)
     except Exception:
         logger.exception("answer_group_question failed")
         await message.reply("Kechirasiz, hozir javob bera olmadim. Birozdan keyin qayta urinib ko'ring.")

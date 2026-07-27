@@ -38,17 +38,25 @@ async def handle_text_entry(message: Message) -> None:
         if not await require_project(session, message, user):
             return
 
+        # AI parsing can take anywhere from a couple seconds to tens of
+        # seconds - without this, the user sees nothing at all until it's
+        # done and reasonably assumes the bot is broken (Telegram's own
+        # "typing..." indicator fades after ~5s, too short for a slow
+        # response). Voice/receipt already show an equivalent status message.
+        status_msg = await message.answer("⏳ Tahlil qilinmoqda...")
+
         result = await parse_and_save_transactions(
             session, user, message.text, TransactionSource.manual_text.value, message.message_id
         )
         if isinstance(result, str):
-            await message.answer(result)
+            await status_msg.edit_text(result)
             return
 
         items, tx_ids = result
         project_name = user.current_project.name if user.current_project else "-"
         reporter_name = user.full_name or user.username or "Xodim"
 
+    await status_msg.delete()
     ack = await message.answer(format_ack_table(items, project_name, reporter_name))
 
     async with async_session() as session:

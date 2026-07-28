@@ -62,7 +62,7 @@ def report_period_keyboard() -> InlineKeyboardMarkup:
 
 def daftar_reply_keyboard(count: int) -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=f"📒 Daftar ({count})"), KeyboardButton(text="🔄 Yangilash")]],
+        keyboard=[[KeyboardButton(text=f"📒 Daftar ({count})"), KeyboardButton(text="🏠 Bosh menyu")]],
         resize_keyboard=True,
     )
 

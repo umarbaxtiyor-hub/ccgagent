@@ -40,42 +40,48 @@ def _fmt_amount(amount: float) -> str:
     return f"{amount:,.0f}"
 
 
-_NAME_WIDTH = 16
-_UNIT_WIDTH = 5
-_AMOUNT_WIDTH = 12
-_SEP = "-" * (3 + _NAME_WIDTH + 5 + 1 + _UNIT_WIDTH + _AMOUNT_WIDTH)
+_NAME_MAX = 28
+_ROW_WIDTH = 31
+_SEP = "-" * _ROW_WIDTH
 
 
-def _table_row(idx: int, name: str, qty: float, unit: str, amount: float) -> str:
-    display_name = h(name)[:_NAME_WIDTH]
-    qty_str = f"{qty:g}" if qty else "-"
-    display_unit = h(unit)[:_UNIT_WIDTH]
-    return (
-        f"{idx:02d} {display_name:<{_NAME_WIDTH}}"
-        f"{qty_str:>5} {display_unit:<{_UNIT_WIDTH}}{_fmt_amount(amount):>{_AMOUNT_WIDTH}}"
-    )
+def _truncate(name: str, width: int) -> str:
+    if len(name) <= width:
+        return name
+    return name[: width - 1] + "…"
+
+
+def _table_row_lines(idx: int, name: str, qty: float, unit: str, amount: float) -> list[str]:
+    display_name = h(_truncate(name, _NAME_MAX))
+    qty_unit = f"{qty:g} {h(unit)}".strip() if qty else "-"
+    return [
+        f"{idx:02d} {display_name}",
+        f"   {qty_unit:<12}{_fmt_amount(amount):>16}",
+    ]
 
 
 def _build_table(items: list[tuple[str, float, str, float, str]]) -> list[str]:
-    """items: (name, qty, unit, amount, type) where type is 'income'/'expense'."""
-    header = (
-        f"{'№':<3}{'Nomi':<{_NAME_WIDTH}}"
-        f"{'Miqd':>5} {'Birl':<{_UNIT_WIDTH}}{'Summa':>{_AMOUNT_WIDTH}}"
-    )
-    table_lines = [_SEP, header, _SEP]
+    """items: (name, qty, unit, amount, type) where type is 'income'/'expense'.
+    Each item takes two lines - name on its own line, then qty/summa below -
+    instead of one line crammed into fixed-width columns. A long item name
+    used to get silently cut off mid-word at a fixed column width (e.g.
+    "Kichik mebel nar[xi]"), which read as broken rather than intentionally
+    truncated; giving the name its own line means it almost never needs
+    truncating at all."""
+    table_lines = [_SEP]
     total_income = 0.0
     total_expense = 0.0
     for i, (name, qty, unit, amount, type_) in enumerate(items, start=1):
-        table_lines.append(_table_row(i, name, qty, unit, amount))
+        table_lines.extend(_table_row_lines(i, name, qty, unit, amount))
         if type_ == "income":
             total_income += amount
         else:
             total_expense += amount
     table_lines.append(_SEP)
-    table_lines.append(f"{'Jami kirim:':<27}{_fmt_amount(total_income):>{_AMOUNT_WIDTH}}")
-    table_lines.append(f"{'JAMI CHIQIM:':<27}{_fmt_amount(total_expense):>{_AMOUNT_WIDTH}}")
+    table_lines.append(f"{'Jami kirim:':<15}{_fmt_amount(total_income):>16}")
+    table_lines.append(f"{'JAMI CHIQIM:':<15}{_fmt_amount(total_expense):>16}")
     table_lines.append(_SEP)
-    table_lines.append(f"{'BALANS:':<27}{_fmt_amount(total_income - total_expense):>{_AMOUNT_WIDTH}}")
+    table_lines.append(f"{'BALANS:':<15}{_fmt_amount(total_income - total_expense):>16}")
     return table_lines
 
 
@@ -282,9 +288,9 @@ async def open_daftar_button(message: Message) -> None:
     await message.answer(text, reply_markup=markup)
 
 
-@router.message(F.chat.type == "private", F.text == "🔄 Yangilash", AllowedUser())
+@router.message(F.chat.type == "private", F.text == "🏠 Bosh menyu", AllowedUser())
 async def refresh_main_menu(message: Message) -> None:
-    """"Yangilash" does exactly what /start does - re-greets, refreshes the
+    """"Bosh menyu" does exactly what /start does - re-greets, refreshes the
     persistent Daftar count, and re-notifies admins if project assignment
     is still pending - rather than a separate, narrower refresh flow."""
     await cmd_start(message)

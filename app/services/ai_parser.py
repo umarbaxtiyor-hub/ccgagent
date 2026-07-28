@@ -287,6 +287,66 @@ async def _generate_json(parts: list[dict[str, Any]], schema: dict[str, Any], mo
             raise
 
 
+async def _generate_text_multimodal_gemini(parts: list[dict[str, Any]], model: str | None = None) -> str:
+    url = _GEMINI_API_URL.format(model=model or settings.gemini_model)
+    payload = {
+        "contents": [{"role": "user", "parts": parts}],
+        # A dense 30+ row table transcribed verbatim (one line per row) can
+        # run to a few thousand tokens - same headroom reasoning as the JSON
+        # extraction path.
+        "generationConfig": {"maxOutputTokens": 8192},
+    }
+    async with aiohttp.ClientSession() as session:
+        async with session.post(
+            url,
+            params={"key": settings.gemini_api_key},
+            json=payload,
+            timeout=aiohttp.ClientTimeout(total=60),
+        ) as resp:
+            if resp.status != 200:
+                text = await resp.text()
+                raise RuntimeError(f"Gemini API error {resp.status}: {text}")
+            data = await resp.json()
+    try:
+        return data["candidates"][0]["content"]["parts"][0]["text"]
+    except (KeyError, IndexError) as e:
+        raise ValueError(f"Gemini javobida matn topilmadi: {data}") from e
+
+
+async def _generate_text_multimodal_openai(parts: list[dict[str, Any]]) -> str:
+    content = _parts_to_openai_content(parts)
+    payload = {"model": settings.openai_model, "messages": [{"role": "user", "content": content}]}
+    async with aiohttp.ClientSession() as session:
+        async with session.post(
+            _OPENAI_CHAT_URL,
+            headers={"Authorization": f"Bearer {settings.openai_api_key}"},
+            json=payload,
+            timeout=aiohttp.ClientTimeout(total=60),
+        ) as resp:
+            if resp.status != 200:
+                text = await resp.text()
+                raise RuntimeError(f"OpenAI API error {resp.status}: {text}")
+            data = await resp.json()
+    try:
+        return data["choices"][0]["message"]["content"]
+    except (KeyError, IndexError) as e:
+        raise ValueError(f"OpenAI javobida matn topilmadi: {data}") from e
+
+
+async def _generate_text_multimodal(parts: list[dict[str, Any]], model: str | None = None) -> str:
+    try:
+        return await _generate_text_multimodal_gemini(parts, model)
+    except Exception as gemini_error:
+        if not settings.openai_api_key:
+            raise
+        logger.warning("Gemini failed (%s), falling back to OpenAI", gemini_error)
+        try:
+            return await _generate_text_multimodal_openai(parts)
+        except Exception:
+            logger.exception("OpenAI fallback also failed")
+            raise
+
+
 async def _generate_text_gemini(prompt: str) -> str:
     url = _GEMINI_API_URL.format(model=settings.gemini_model)
     payload = {
@@ -421,6 +481,42 @@ async def parse_expense_text(
     return result["transactions"]
 
 
+async def _transcribe_table_image(image_bytes: bytes, media_type: str) -> str:
+    """Stage 1 of receipt parsing: a pure verbatim transcription pass, with
+    no JSON schema to satisfy at the same time. Doing OCR and schema-fitting
+    in a single call competes for the model's attention on dense tables
+    (20-30+ rows) - it's exactly where names and amounts from adjacent rows
+    get swapped or merged. Splitting "read carefully" from "structure what
+    was read" into two calls made the row-misalignment failures far rarer in
+    testing on large tables."""
+    b64_image = base64.b64encode(image_bytes).decode("utf-8")
+    prompt = (
+        "Bu rasm - chek, kvitansiya, qo'lda yozilgan xarid ro'yxati yoki jadval (masalan Excel "
+        "skrinshoti). Vazifang: HECH NARSANI hisoblamasdan, tuzatmasdan yoki tushunmasdan, faqat "
+        "jadvaldagi HAR BIR qatorni SO'ZMA-SO'Z ko'chirib yozish.\n\n"
+        "1. Avval jadvalda nechta qator borligini sanab chiq.\n"
+        "2. Har bir qatorni CHAP TOMONDAN O'NGGA, yuqoridan pastga, alohida-alohida o'qi va aynan shu "
+        "formatda yoz (bitta qator = bitta satr):\n"
+        "<qator raqami>) <nomi> | <miqdori> <birligi> | <summasi>\n"
+        "3. Har bir qatorning nomi, miqdori, birligi va summasi FAQAT O'SHA BIR QATORNING o'zidan "
+        "olinishi kerak - hech qachon bitta qatorning ma'lumotini qo'shni (keyingi yoki oldingi) "
+        "qatorning ma'lumoti bilan aralashtirma yoki almashtirma.\n"
+        "4. Qatorni aniq o'qiy olmasang ham (xira, qiyshiq va h.k.), qo'lingdan kelganini yoz va "
+        "satr oxiriga \"(aniq emas)\" deb qo'sh - qatorni tashlab ketma, lekin qolganlarini ham "
+        "joyidan siljitmasdan davom ettir.\n"
+        "5. Jadvalda lotin va kirill yozuvi aralash bo'lishi mumkin (masalan \"Профиль\", \"Саморез\") "
+        "- ikkalasini ham bir xil diqqat bilan o'qi.\n"
+        "6. Agar oxirida \"ИТОГО\"/\"JAMI\"/umumiy summa qatori bo'lsa, uni ham \"JAMI: <summa>\" deb "
+        "alohida yoz.\n"
+        "7. Boshqa hech qanday izoh, sarlavha yoki tushuntirish yozma - faqat jadval qatorlari."
+    )
+    parts = [
+        {"inline_data": {"mime_type": media_type, "data": b64_image}},
+        {"text": prompt},
+    ]
+    return await _generate_text_multimodal(parts, model=settings.gemini_vision_model)
+
+
 async def parse_receipt_image(
     image_bytes: bytes,
     media_type: str,
@@ -428,45 +524,24 @@ async def parse_receipt_image(
     income_categories: list[str],
     today: date,
 ) -> list[dict]:
-    b64_image = base64.b64encode(image_bytes).decode("utf-8")
+    transcript = await _transcribe_table_image(image_bytes, media_type)
     prompt = (
         f"Bugungi sana: {today.isoformat()}\n"
         f"Chiqim kategoriyalari: {', '.join(expense_categories)}\n"
         f"Kirim kategoriyalari: {', '.join(income_categories)}\n\n"
-        "Bu rasm - chek, kvitansiya, qo'lda yozilgan xarid ro'yxati yoki jadval (masalan Excel "
-        "skrinshoti) bo'lishi mumkin. Rasmda ko'p qatorli jadval bo'lsa (nomi, birlik, miqdor, summa "
-        "kabi ustunlar bilan), quyidagilarga QATIY rioya qil:\n"
-        "1. Avval jadvalda nechta qator borligini o'zing uchun sanab chiq.\n"
-        "2. Har bir qatorni CHAP TOMONDAN O'NGGA, yuqoridan pastga, ustunlar bo'yicha ALOHIDA-ALOHIDA "
-        "o'qi: nomi, miqdori, birligi va summasi FAQAT O'SHA BIR QATORNING o'zidan olinishi kerak - "
-        "hech qachon bitta qatorning nomini boshqa (masalan keyingi yoki oldingi) qatorning miqdori, "
-        "birligi yoki summasi bilan aralashtirma. Bu eng ko'p uchraydigan xato: rasmda ko'p qator "
-        "bo'lganda, bitta qatorni o'qib o'tkazib yuborsang yoki noto'g'ri tushunsang, undan keyingi "
-        "BARCHA qatorlar bir pog'ona siljib, nomi bilan summasi mos kelmay qoladi - shuning uchun "
-        "har bir qatorni alohida tekshirib, siljishga yo'l qo'yma.\n"
-        "3. Rasm sifati past bo'lsa ham (xira, qiyshiq, yorug'lik yomon va h.k.) qo'lingdan kelgancha "
-        "diqqat bilan o'qishga harakat qil - qatorni faqat chindan ham hech narsa o'qib bo'lmaydigan "
-        "darajada (butunlay ko'rinmaydigan yoki qog'oz kesilib qolgan) holatdagina TASHLAB KET. Agar "
-        "qator qisman o'qiladigan bo'lsa (masalan nomi aniq-yu, summasi xira ko'rinsa yoki aksincha), "
-        "qatorni tashlab yubormasdan, o'qiy olganingni yoz va o'sha bandga 'low' confidence qo'y - "
-        "taxmin qilib mutlaqo noto'g'ri raqam to'qib chiqarish esa hamon noto'g'ri, shuning uchun aniq "
-        "bo'lmagan qismni confidence bilan belgila, o'ylab topma.\n"
-        "4. Oxirida javobingizdagi elementlar soni jadvaldagi (o'qib bo'lgan yoki qisman o'qib, low "
-        "confidence bilan belgilangan) qatorlar soniga mos kelishini o'zing tekshirib chiq.\n"
-        "5. Jadvalda lotin va kirill yozuvi aralash bo'lishi mumkin (masalan \"Профиль\", \"Саморез\", "
-        "\"Профнастил\" kabi kirilcha nomlar lotincha nomlar bilan bitta jadvalda kelishi mumkin). "
-        "Yozuv turi o'zgarishi hech qanday qatorni o'tkazib yuborish yoki qo'shni qatorlar bilan "
-        "aralashtirish sababi bo'lmasligi kerak - kirilcha nomli qatorlarni ham xuddi lotincha "
-        "qatorlar kabi bir xil diqqat bilan, alohida-alohida o'qi.\n\n"
-        "Agar rasmda faqat bitta band bo'lsa, bitta elementli ro'yxat qaytar. Agar chekdagi/jadvaldagi "
-        "sana o'qib bo'lmasa, bugungi sanani ishlat."
+        "Quyida chek/jadval rasmidan qator-qator ko'chirilgan matn berilgan. Har bir qatorni "
+        "ALOHIDA element sifatida qaytar - hech birini o'tkazib yubormasdan, birlashtirmasdan yoki "
+        "qayta tartibga solmasdan, aynan shu tartibda. \"(aniq emas)\" deb belgilangan qatorlarga "
+        "'low' confidence qo'y. \"JAMI:\" bilan boshlangan qatorni natijaga alohida element sifatida "
+        "QO'SHMA - faqat tekshirish uchun undan foydalan (elementlar yig'indisi shu summaga mos "
+        "kelishini tekshir).\n\n"
+        "Miqdor haqida: matnda ko'rsatilgan summa har doim o'sha qatorning UMUMIY (jami) summasi - "
+        "uni miqdorga ko'paytirma, faqat aynan shunday yoz.\n\n"
+        f"Jadval matni:\n{transcript}\n\n"
+        "Agar chekdagi/jadvaldagi sana ko'rsatilmagan bo'lsa, bugungi sanani ishlat."
     )
-    parts = [
-        {"inline_data": {"mime_type": media_type, "data": b64_image}},
-        {"text": prompt},
-    ]
     schema = _build_transactions_schema(expense_categories, income_categories)
-    result = await _generate_json(parts, schema, model=settings.gemini_vision_model)
+    result = await _generate_json([{"text": prompt}], schema)
     return result["transactions"]
 
 

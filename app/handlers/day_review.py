@@ -40,48 +40,60 @@ def _fmt_amount(amount: float) -> str:
     return f"{amount:,.0f}"
 
 
-_NAME_MAX = 28
-_ROW_WIDTH = 31
+_NAME_WIDTH = 18
+_QTY_WIDTH = 9
+_AMOUNT_WIDTH = 12
+_ROW_WIDTH = 3 + _NAME_WIDTH + _QTY_WIDTH + _AMOUNT_WIDTH  # 42 chars - fits a phone
+# screen width without horizontal scroll in a Telegram <pre> block (verified
+# against a real device screenshot at this same width).
 _SEP = "-" * _ROW_WIDTH
 
 
 def _truncate(name: str, width: int) -> str:
+    """Cuts to width with a trailing "…" so a shortened name reads as
+    intentionally shortened, not like a broken/cut-off word - the previous
+    plain slice (name[:width]) silently chopped mid-word (e.g. "Kichik mebel
+    nar" from "Kichik mebel narxi") with no visual sign anything was cut."""
     if len(name) <= width:
         return name
     return name[: width - 1] + "…"
 
 
-def _table_row_lines(idx: int, name: str, qty: float, unit: str, amount: float) -> list[str]:
-    display_name = h(_truncate(name, _NAME_MAX))
+def _table_row(idx: int, name: str, qty: float, unit: str, amount: float) -> str:
+    # Truncate to width-1, not width, so a name that hits the limit still
+    # leaves a guaranteed single space before the next column when padded -
+    # otherwise a max-length name and the qty column run together with no gap.
+    display_name = h(_truncate(name, _NAME_WIDTH - 1))
     qty_unit = f"{qty:g} {h(unit)}".strip() if qty else "-"
-    return [
-        f"{idx:02d} {display_name}",
-        f"   {qty_unit:<12}{_fmt_amount(amount):>16}",
-    ]
+    return (
+        f"{idx:02d} {display_name:<{_NAME_WIDTH}}"
+        f"{_truncate(qty_unit, _QTY_WIDTH - 1):<{_QTY_WIDTH}}{_fmt_amount(amount):>{_AMOUNT_WIDTH}}"
+    )
 
 
 def _build_table(items: list[tuple[str, float, str, float, str]]) -> list[str]:
     """items: (name, qty, unit, amount, type) where type is 'income'/'expense'.
-    Each item takes two lines - name on its own line, then qty/summa below -
-    instead of one line crammed into fixed-width columns. A long item name
-    used to get silently cut off mid-word at a fixed column width (e.g.
-    "Kichik mebel nar[xi]"), which read as broken rather than intentionally
-    truncated; giving the name its own line means it almost never needs
-    truncating at all."""
-    table_lines = [_SEP]
+    One compact line per item (name, qty+unit, summa) - most real item names
+    fit fully within the name column; the rare longer one gets a visible
+    "…" instead of a silent, confusing mid-word cutoff (see _truncate)."""
+    header = f"{'№':<3}{'Nomi':<{_NAME_WIDTH}}{'Miqdor':<{_QTY_WIDTH}}{'Summa':>{_AMOUNT_WIDTH}}"
+    table_lines = [_SEP, header, _SEP]
     total_income = 0.0
     total_expense = 0.0
     for i, (name, qty, unit, amount, type_) in enumerate(items, start=1):
-        table_lines.extend(_table_row_lines(i, name, qty, unit, amount))
+        table_lines.append(_table_row(i, name, qty, unit, amount))
         if type_ == "income":
             total_income += amount
         else:
             total_expense += amount
     table_lines.append(_SEP)
-    table_lines.append(f"{'Jami kirim:':<15}{_fmt_amount(total_income):>16}")
-    table_lines.append(f"{'JAMI CHIQIM:':<15}{_fmt_amount(total_expense):>16}")
+    label_width = _ROW_WIDTH - _AMOUNT_WIDTH
+    table_lines.append(f"{'Jami kirim:':<{label_width}}{_fmt_amount(total_income):>{_AMOUNT_WIDTH}}")
+    table_lines.append(f"{'JAMI CHIQIM:':<{label_width}}{_fmt_amount(total_expense):>{_AMOUNT_WIDTH}}")
     table_lines.append(_SEP)
-    table_lines.append(f"{'BALANS:':<15}{_fmt_amount(total_income - total_expense):>16}")
+    table_lines.append(
+        f"{'BALANS:':<{label_width}}{_fmt_amount(total_income - total_expense):>{_AMOUNT_WIDTH}}"
+    )
     return table_lines
 
 

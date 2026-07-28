@@ -40,31 +40,73 @@ def _fmt_amount(amount: float) -> str:
     return f"{amount:,.0f}"
 
 
-def _daftar_pre_table(
-    project_name: str, reporter_name: str, date_str: str, items: list[tuple[str, float, str, float, str]]
-) -> str:
-    """Free-flowing bulleted text instead of a fixed-width monospace table -
-    no column widths to align, so nothing ever needs truncating and it wraps
-    naturally on any screen width (the tradeoff vs the <pre> table: rows
-    aren't vertically aligned into scannable columns anymore)."""
-    lines = [
-        f"📋 LOYIHA: {h(project_name)}",
-        f"👤 {h(reporter_name)}  •  📅 {date_str}",
-        "",
-    ]
+_NAME_WIDTH = 18
+_QTY_WIDTH = 9
+_AMOUNT_WIDTH = 12
+_ROW_WIDTH = 3 + _NAME_WIDTH + _QTY_WIDTH + _AMOUNT_WIDTH  # 42 chars - fits a phone
+# screen width without horizontal scroll in a Telegram <pre> block (verified
+# against a real device screenshot at this same width).
+_SEP = "-" * _ROW_WIDTH
+
+
+def _truncate(name: str, width: int) -> str:
+    """Cuts to width with a trailing "…" so a shortened name reads as
+    intentionally shortened, not like a broken/cut-off word - a plain slice
+    (name[:width]) would silently chop mid-word with no visual sign anything
+    was cut."""
+    if len(name) <= width:
+        return name
+    return name[: width - 1] + "…"
+
+
+def _table_row(idx: int, name: str, qty: float, unit: str, amount: float) -> str:
+    # Truncate to width-1, not width, so a name that hits the limit still
+    # leaves a guaranteed single space before the next column when padded -
+    # otherwise a max-length name and the qty column run together with no gap.
+    display_name = h(_truncate(name, _NAME_WIDTH - 1))
+    qty_unit = f"{qty:g} {h(unit)}".strip() if qty else "-"
+    return (
+        f"{idx:02d} {display_name:<{_NAME_WIDTH}}"
+        f"{_truncate(qty_unit, _QTY_WIDTH - 1):<{_QTY_WIDTH}}{_fmt_amount(amount):>{_AMOUNT_WIDTH}}"
+    )
+
+
+def _build_table(items: list[tuple[str, float, str, float, str]]) -> list[str]:
+    """items: (name, qty, unit, amount, type) where type is 'income'/'expense'."""
+    header = f"{'№':<3}{'Nomi':<{_NAME_WIDTH}}{'Miqdor':<{_QTY_WIDTH}}{'Summa':>{_AMOUNT_WIDTH}}"
+    table_lines = [_SEP, header, _SEP]
     total_income = 0.0
     total_expense = 0.0
     for i, (name, qty, unit, amount, type_) in enumerate(items, start=1):
-        lines.append(_daily_report_item_line(i, name, qty, unit, amount))
+        table_lines.append(_table_row(i, name, qty, unit, amount))
         if type_ == "income":
             total_income += amount
         else:
             total_expense += amount
-    lines.append("")
-    lines.append(f"💰 Jami kirim: {_fmt_amount(total_income)} so'm")
-    lines.append(f"💸 JAMI CHIQIM: {_fmt_amount(total_expense)} so'm")
-    lines.append(f"📊 BALANS: {_fmt_amount(total_income - total_expense)} so'm")
-    return "\n".join(lines)
+    table_lines.append(_SEP)
+    label_width = _ROW_WIDTH - _AMOUNT_WIDTH
+    table_lines.append(f"{'Jami kirim:':<{label_width}}{_fmt_amount(total_income):>{_AMOUNT_WIDTH}}")
+    table_lines.append(f"{'JAMI CHIQIM:':<{label_width}}{_fmt_amount(total_expense):>{_AMOUNT_WIDTH}}")
+    table_lines.append(_SEP)
+    table_lines.append(
+        f"{'BALANS:':<{label_width}}{_fmt_amount(total_income - total_expense):>{_AMOUNT_WIDTH}}"
+    )
+    return table_lines
+
+
+def _daftar_pre_table(
+    project_name: str, reporter_name: str, date_str: str, items: list[tuple[str, float, str, float, str]]
+) -> str:
+    """LOYIHA/XODIM/SANA sit above the <pre> block as their own lines (not
+    inside it) so the block only ever contains the copyable table itself -
+    the tradeoff is that tapping "copy" on the table no longer carries which
+    project/employee it belongs to along with it."""
+    header = (
+        f"📁 LOYIHA: {h(project_name)}\n"
+        f"👤 XODIM: {h(reporter_name)}\n"
+        f"📅 SANA: {date_str}\n\n"
+    )
+    return header + "<pre>" + "\n".join(_build_table(items)) + "</pre>"
 
 
 def _daily_report_item_line(idx: int, name: str, qty: float, unit: str, amount: float) -> str:

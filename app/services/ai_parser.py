@@ -120,7 +120,7 @@ def _build_transactions_schema(expense_categories: list[str], income_categories:
     }
 
 
-def _build_edit_schema(expense_categories: list[str], income_categories: list[str]) -> dict:
+def _build_single_edit_schema(expense_categories: list[str], income_categories: list[str]) -> dict:
     return {
         "type": "OBJECT",
         "properties": {
@@ -142,6 +142,23 @@ def _build_edit_schema(expense_categories: list[str], income_categories: list[st
             },
         },
         "required": ["row_index", "type", "amount", "category", "description", "confidence"],
+    }
+
+
+def _build_edits_schema(expense_categories: list[str], income_categories: list[str]) -> dict:
+    return {
+        "type": "OBJECT",
+        "properties": {
+            "edits": {
+                "type": "ARRAY",
+                "description": (
+                    "Foydalanuvchi ko'rsatmasida nechta qator tuzatishni so'ragan bo'lsa, shuncha "
+                    "element - har bir qator uchun alohida"
+                ),
+                "items": _build_single_edit_schema(expense_categories, income_categories),
+            }
+        },
+        "required": ["edits"],
     }
 
 
@@ -473,6 +490,20 @@ async def parse_expense_text(
         "muddat, \"5 dona\" son). Agar matnda ikki xil birlik bir-biriga zid keladi yoki miqdor/birlik "
         "chindan ham noaniq bo'lsa, o'zingcha taxmin qilib to'qib chiqarma - shu bandni 'low' confidence "
         "bilan belgila.\n\n"
+        "Miqdorni sig'im/hajm so'zi bilan aralashtirmaslik: \"12 kishilik stol\", \"6 o'rindiqli divan\" "
+        "kabi \"-lik\"/\"o'rindiqli\" qo'shimchasi bitta buyumning SIG'IMINI (u nechta odamga mo'ljallangan) "
+        "bildiradi, sotib olingan buyum SONINI emas - bunday holda, agar boshqa aniq son ko'rsatilmagan "
+        "bo'lsa, quantity=1 deb ol (masalan \"12 kishilik stol\" - bitta stol, quantity=1, description "
+        "ichida \"12 kishilik\" so'zini saqlab qol). Xuddi shunday \"2 qavat uchun\" kabi maqsad/joy "
+        "izohini ham miqdor deb qabul qilma (\"2 qavat uchun divan\" - bu nechta divan ekanini "
+        "bildirmaydi, qayerda ishlatilishini bildiradi) - bunday holatda ham aniq son yo'q bo'lsa "
+        "quantity=1 deb ol, taxmin qilib boshqa son yozma.\n\n"
+        "Valyuta haqida: agar summa oldida/keyinida \"$\" belgisi yoki \"dollar\"/\"dollarda\" so'zi "
+        "bo'lsa, bu AQSH dollarida degani - bunday holda summani hech qachon xuddi so'm sifatida "
+        "qabul qilma va o'zingcha kursga ko'paytirib ham hisoblama (aniq bugungi kurs senga noma'lum). "
+        "Bunday holatda shu bandga 'low' confidence qo'y, description'ga aslida qancha va qaysi "
+        "valyutada yozilganini ko'rsat (masalan \"2500 dollar\"), summa maydoniga esa xuddi shu sonni "
+        "(2500) yoz - foydalanuvchi buni so'mga o'zi aniqlashtirib qayta yozadi.\n\n"
         f"Quyidagi xabarni tahlil qil:\n"
         f'"{text}"'
     )
@@ -568,22 +599,29 @@ async def parse_daftar_edit(
     instruction: str,
     expense_categories: list[str],
     income_categories: list[str],
-) -> dict:
+) -> list[dict]:
     """Given the numbered list of a user's current unconfirmed Daftar rows and
     a free-text correction instruction (e.g. "2-qatordagi benzin summasini
-    350000 qiling"), figures out which row is meant and returns its full
-    corrected fields - unmentioned fields are kept the same as the current
-    value shown in rows_text."""
+    350000 qiling", or several corrections in one message, one per line),
+    figures out which row(s) are meant and returns each one's full corrected
+    fields - unmentioned fields are kept the same as the current value shown
+    in rows_text. Always returns a list, even for a single-row correction -
+    a message correcting multiple rows at once used to silently apply only
+    one of them while still reporting blanket success."""
     prompt = (
         f"Chiqim kategoriyalari: {', '.join(expense_categories)}\n"
         f"Kirim kategoriyalari: {', '.join(income_categories)}\n\n"
         f"Foydalanuvchining hozirgi tasdiqlanmagan yozuvlari (Daftar) ro'yxati:\n{rows_text}\n\n"
-        f"Foydalanuvchi shu ro'yxatdagi bitta qatorni to'g'irlashni so'rab yozdi:\n\"{instruction}\"\n\n"
-        "Qaysi qator (row_index, ro'yxatdagi raqami) nazarda tutilganini aniqla va o'sha qatorning "
-        "TO'LIQ, tuzatilgandan keyingi holatini qaytar: foydalanuvchi nima haqida yozgan bo'lsa - shuni "
-        "o'zgartir, boshqa barcha maydonlarni ro'yxatda ko'rsatilgan joriy qiymati bilan bir xil qoldir. "
-        "Agar qaysi qator yoki nima o'zgarishi noaniq bo'lsa, confidence='low' qo'y."
+        f"Foydalanuvchi shu ro'yxatdagi bir yoki bir nechta qatorni to'g'irlashni so'rab yozdi "
+        f"(har bir tuzatish alohida qatorda/jumlada bo'lishi mumkin):\n\"{instruction}\"\n\n"
+        "Ko'rsatmada nechta ALOHIDA qator tuzatilishi so'ralgan bo'lsa, natijada shuncha element "
+        "qaytar - HAR BIRINI qo'ymasdan, faqat bittasini emas. Har bir element uchun: qaysi qator "
+        "(row_index, ro'yxatdagi raqami) nazarda tutilganini aniqla va o'sha qatorning TO'LIQ, "
+        "tuzatilgandan keyingi holatini qaytar - foydalanuvchi nima haqida yozgan bo'lsa shuni "
+        "o'zgartir, boshqa barcha maydonlarni ro'yxatda ko'rsatilgan joriy qiymati bilan bir xil "
+        "qoldir. Agar biror tuzatish uchun qaysi qator yoki nima o'zgarishi noaniq bo'lsa, o'sha "
+        "elementga confidence='low' qo'y (lekin ro'yxatdan chiqarib tashlama)."
     )
-    schema = _build_edit_schema(expense_categories, income_categories)
+    schema = _build_edits_schema(expense_categories, income_categories)
     result = await _generate_json([{"text": prompt}], schema)
-    return result
+    return result["edits"]

@@ -353,7 +353,7 @@ async def apply_edit_instruction(message: Message, state: FSMContext) -> None:
         income_cats = await category_names(session, TransactionType.income)
 
         try:
-            edit = await parse_daftar_edit(rows_text, message.text, expense_cats, income_cats)
+            edits = await parse_daftar_edit(rows_text, message.text, expense_cats, income_cats)
         except Exception:
             logger.exception("parse_daftar_edit failed")
             await message.answer(
@@ -362,29 +362,47 @@ async def apply_edit_instruction(message: Message, state: FSMContext) -> None:
             )
             return
 
-        row_index = edit.get("row_index")
-        if edit.get("confidence") == "low" or not row_index or not (1 <= row_index <= len(transactions)):
+        if not edits:
             await message.answer(
                 "Qaysi qatorni va nimani o'zgartirish kerakligini aniq tushuna olmadim. Iltimos, "
                 "masalan \"2-qatordagi summani 350000 qiling\" kabi aniqroq yozing."
             )
             return
 
-        tx = transactions[row_index - 1]
-        type_enum = TransactionType(edit["type"])
-        category = await get_or_create_category(session, edit["category"], type_enum)
-        tx.type = type_enum
-        tx.category_id = category.id
-        tx.amount = float(edit["amount"])
-        tx.description = edit.get("description") or tx.description
-        tx.quantity = float(edit.get("quantity") or 0)
-        tx.unit = edit.get("unit") or tx.unit
-        tx.unit_price = float(edit.get("unit_price") or 0)
-        await session.commit()
+        applied = 0
+        skipped = 0
+        for edit in edits:
+            row_index = edit.get("row_index")
+            if edit.get("confidence") == "low" or not row_index or not (1 <= row_index <= len(transactions)):
+                skipped += 1
+                continue
+            tx = transactions[row_index - 1]
+            type_enum = TransactionType(edit["type"])
+            category = await get_or_create_category(session, edit["category"], type_enum)
+            tx.type = type_enum
+            tx.category_id = category.id
+            tx.amount = float(edit["amount"])
+            tx.description = edit.get("description") or tx.description
+            tx.quantity = float(edit.get("quantity") or 0)
+            tx.unit = edit.get("unit") or tx.unit
+            tx.unit_price = float(edit.get("unit_price") or 0)
+            applied += 1
 
+        if applied == 0:
+            await session.rollback()
+            await message.answer(
+                "Qaysi qatorni va nimani o'zgartirish kerakligini aniq tushuna olmadim. Iltimos, "
+                "masalan \"2-qatordagi summani 350000 qiling\" kabi aniqroq yozing."
+            )
+            return
+
+        await session.commit()
         text, markup = await _render_day_list(session, user.id)
 
-    await message.answer("✅ Yozuv yangilandi.")
+    summary = f"✅ {applied} ta yozuv yangilandi." if applied > 1 else "✅ Yozuv yangilandi."
+    if skipped:
+        summary += f" ⚠️ {skipped} ta o'zgartirishni aniq tushuna olmadim, o'tkazib yubordim."
+    await message.answer(summary)
     await message.answer(text, reply_markup=markup)
 
 

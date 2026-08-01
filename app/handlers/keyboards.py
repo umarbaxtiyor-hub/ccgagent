@@ -64,6 +64,11 @@ def daftar_reply_keyboard(count: int) -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text=f"📒 Daftar ({count})"), KeyboardButton(text="🏠 Bosh menyu")]],
         resize_keyboard=True,
+        # Without this, tapping Telegram's own keyboard-toggle icon (or
+        # switching to the system keyboard to type) can dismiss this custom
+        # keyboard until the bot happens to send another message with a
+        # fresh markup - is_persistent keeps it docked and visible always.
+        is_persistent=True,
     )
 
 
